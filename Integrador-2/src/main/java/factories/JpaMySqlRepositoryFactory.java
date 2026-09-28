@@ -1,8 +1,8 @@
 package factories;
 
 import jakarta.persistence.*;
-import repositories.*;
-import repositories.interfaces.*;
+import repositories.JpaCarreraRepository;
+import repositories.interfaces.RepositoryCarrera;
 
 public class JpaMySqlRepositoryFactory extends RepositoryFactory {
     private static final String PERSISTENCE_UNIT_NAME = "Integrador 2";
