@@ -5,11 +5,14 @@ import dtos.ReporteCarreraDTO;
 import entities.Carrera;
 import entities.Estudiante;
 import entities.Inscripcion;
-import jakarta.persistence.*;
+import jakarta.persistence.EntityManager;
 import repositories.interfaces.RepositoryCarrera;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class JpaCarreraRepository implements RepositoryCarrera {
+
     private final EntityManager em;
 
     public JpaCarreraRepository(EntityManager em) {
@@ -102,19 +105,23 @@ public class JpaCarreraRepository implements RepositoryCarrera {
     public void matricularEstudianteEnCarrera(Long lu, String nombreCarrera) {
         try {
             Estudiante estudiante = em.createQuery(
-                    "SELECT e FROM Estudiante e WHERE e.lu = :lu",
-                    Estudiante.class)
+                            "SELECT e FROM Estudiante e WHERE e.lu = :lu",
+                            Estudiante.class
+                    )
                     .setParameter("lu", lu)
                     .getSingleResult();
 
             Carrera carrera = em.createQuery(
-                    "SELECT c FROM Carrera c WHERE c.nombre = :nombre",
-                    Carrera.class)
+                            "SELECT c FROM Carrera c WHERE c.nombre = :nombre",
+                            Carrera.class
+                    )
                     .setParameter("nombre", nombreCarrera)
                     .getSingleResult();
 
             em.getTransaction().begin();
+
             em.persist(new Inscripcion(carrera, estudiante));
+
             em.getTransaction().commit();
 
         } catch (Exception e) {
@@ -128,21 +135,18 @@ public class JpaCarreraRepository implements RepositoryCarrera {
 
         try {
             List<Carrera> carreras = em.createQuery(
-                    "SELECT DISTINCT c FROM Carrera c LEFT JOIN FETCH c.inscripciones i ORDER BY c.nombre ASC",
+                    "SELECT DISTINCT c " +
+                            "FROM Carrera c " +
+                            "LEFT JOIN FETCH c.inscripciones " +
+                            "ORDER BY c.nombre ASC",
                     Carrera.class
             ).getResultList();
 
             for (Carrera carrera : carreras) {
+
                 CarreraDTO dto = new CarreraDTO(carrera.getNombre());
 
-                List<Inscripcion> inscripciones = new ArrayList<>(carrera.getInscripciones());
-
-                inscripciones.sort(Comparator.comparing(
-                        Inscripcion::getAnioInscripcion,
-                        Comparator.nullsLast(Comparator.naturalOrder())
-                ));
-
-                for (Inscripcion inscripcion : inscripciones) {
+                for (Inscripcion inscripcion : carrera.getInscripciones()) {
                     dto.addInscripcion(inscripcion);
                 }
 
@@ -158,58 +162,112 @@ public class JpaCarreraRepository implements RepositoryCarrera {
 
     @Override
     public List<ReporteCarreraDTO> reporteCarreras() {
+
         List<ReporteCarreraDTO> reporte = new ArrayList<>();
 
         try {
-            List<Carrera> carreras = em.createQuery(
-                    "SELECT DISTINCT c FROM Carrera c LEFT JOIN FETCH c.inscripciones i ORDER BY c.nombre ASC",
-                    Carrera.class
+
+            // INSCRIPTOS POR CARRERA Y AÑO
+            List<Object[]> inscriptos = em.createQuery(
+                    "SELECT c.nombre, YEAR(i.anioInscripcion), COUNT(i) " +
+                            "FROM Carrera c " +
+                            "JOIN c.inscripciones i " +
+                            "WHERE i.anioInscripcion IS NOT NULL " +
+                            "GROUP BY c.nombre, YEAR(i.anioInscripcion) " +
+                            "ORDER BY c.nombre ASC, YEAR(i.anioInscripcion) ASC",
+                    Object[].class
             ).getResultList();
 
-            for (Carrera carrera : carreras) {
-                Map<Integer, Long> inscriptosPorAnio = new TreeMap<>();
-                Map<Integer, Long> egresadosPorAnio = new TreeMap<>();
+            // EGRESADOS POR CARRERA Y AÑO
+            List<Object[]> egresados = em.createQuery(
+                    "SELECT c.nombre, YEAR(i.anioEgreso), COUNT(i) " +
+                            "FROM Carrera c " +
+                            "JOIN c.inscripciones i " +
+                            "WHERE i.graduado = true " +
+                            "AND i.anioEgreso IS NOT NULL " +
+                            "GROUP BY c.nombre, YEAR(i.anioEgreso) " +
+                            "ORDER BY c.nombre ASC, YEAR(i.anioEgreso) ASC",
+                    Object[].class
+            ).getResultList();
 
-                for (Inscripcion inscripcion : carrera.getInscripciones()) {
-                    if (inscripcion.getAnioInscripcion() != null) {
-                        int anio = inscripcion.getAnioInscripcion().getYear();
+            // CARGAMOS LOS INSCRIPTOS
+            for (Object[] fila : inscriptos) {
 
-                        if (!inscriptosPorAnio.containsKey(anio)) {
-                            inscriptosPorAnio.put(anio, 0L);
-                        }
+                String carrera = (String) fila[0];
+                int anio = ((Number) fila[1]).intValue();
+                long cantidadInscriptos = ((Number) fila[2]).longValue();
 
-                        inscriptosPorAnio.put(
-                                anio,
-                                inscriptosPorAnio.get(anio) + 1
-                        );
-                    }
+                long cantidadEgresados = 0;
 
-                    if (inscripcion.isGraduado() && inscripcion.getAnioEgreso() != null) {
-                        int anio = inscripcion.getAnioEgreso().getYear();
+                // Buscamos si existe un registro de egresados
+                // para la misma carrera y año
+                for (Object[] egresado : egresados) {
 
-                        if (!egresadosPorAnio.containsKey(anio)) {
-                            egresadosPorAnio.put(anio, 0L);
-                        }
+                    String carreraEgresado = (String) egresado[0];
+                    int anioEgresado = ((Number) egresado[1]).intValue();
 
-                        egresadosPorAnio.put(
-                                anio,
-                                egresadosPorAnio.get(anio) + 1
-                        );
+                    if (carrera.equals(carreraEgresado)
+                            && anio == anioEgresado) {
+
+                        cantidadEgresados =
+                                ((Number) egresado[2]).longValue();
+
+                        break;
                     }
                 }
 
-                Set<Integer> anios = new TreeSet<>(inscriptosPorAnio.keySet());
-                anios.addAll(egresadosPorAnio.keySet());
+                reporte.add(new ReporteCarreraDTO(
+                        carrera,
+                        anio,
+                        cantidadInscriptos,
+                        cantidadEgresados
+                ));
+            }
 
-                for (Integer anio : anios) {
+            // AGREGAMOS AÑOS QUE SOLO TENGAN EGRESADOS
+            for (Object[] egresado : egresados) {
+
+                String carrera = (String) egresado[0];
+                int anio = ((Number) egresado[1]).intValue();
+                long cantidadEgresados = ((Number) egresado[2]).longValue();
+
+                boolean existe = false;
+
+                for (ReporteCarreraDTO dto : reporte) {
+
+                    if (dto.getCarrera().equals(carrera)
+                            && dto.getAnio() == anio) {
+
+                        existe = true;
+                        break;
+                    }
+                }
+
+                if (!existe) {
                     reporte.add(new ReporteCarreraDTO(
-                            carrera.getNombre(),
+                            carrera,
                             anio,
-                            inscriptosPorAnio.getOrDefault(anio, 0L),
-                            egresadosPorAnio.getOrDefault(anio, 0L)
+                            0,
+                            cantidadEgresados
                     ));
                 }
             }
+
+            // ORDEN FINAL: CARRERA Y DESPUÉS AÑO
+            reporte.sort((a, b) -> {
+
+                int comparacionCarrera =
+                        a.getCarrera().compareTo(b.getCarrera());
+
+                if (comparacionCarrera != 0) {
+                    return comparacionCarrera;
+                }
+
+                return Integer.compare(
+                        a.getAnio(),
+                        b.getAnio()
+                );
+            });
 
         } catch (Exception e) {
             e.printStackTrace();
