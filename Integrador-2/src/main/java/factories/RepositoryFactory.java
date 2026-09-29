@@ -1,7 +1,7 @@
 package factories;
 
 import jakarta.persistence.EntityManager;
-import repositories.interfaces.RepositoryCarrera;
+import repositories.interfaces.*;
 
 public abstract class RepositoryFactory {
     public static final int MYSQL_JDBC = 1;
