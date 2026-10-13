@@ -38,7 +38,7 @@
 
 ### g) Recuperar los estudiantes de una determinada carrera, filtrado por ciudad de residencia.
 
-(GET http://localhost:8080/api/estudiantes/carrera/1/ciudad/Tandil)
+(GET http://localhost:8080/api/estudiantes/carrera/1/ciudad/Rauch)
 
 ### h) generar un reporte de las carreras, que para cada carrera incluya información de los inscriptos y egresados por año. Se deben ordenar las carreras alfabéticamente, y presentar los años de manera cronológica
 
