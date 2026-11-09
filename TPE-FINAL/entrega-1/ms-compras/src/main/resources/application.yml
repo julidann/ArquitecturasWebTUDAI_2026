@@ -1,0 +1,44 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ms-compras
+  datasource:
+    url: jdbc:postgresql://localhost:5432/compras_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+
+servicios:
+  timeout-ms: 3000
+  reservas:
+    url: http://localhost:8082
+  pagos:
+    url: http://localhost:8084
+
+devoluciones:
+  # hasta cuantas horas antes del evento se puede pedir una devolucion
+  horas-minimas: 72
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.ticketya: INFO
