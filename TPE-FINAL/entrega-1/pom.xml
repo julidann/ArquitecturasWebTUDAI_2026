@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  POM agregador: solo sirve para compilar y testear todos los proyectos juntos con
+  "mvn clean test" desde la raiz. Cada microservicio sigue siendo un proyecto Spring Boot
+  independiente (con su propio parent y su propio mvnw) que se puede construir y
+  ejecutar por separado.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ticketya</groupId>
+    <artifactId>ticketya</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>TicketYa</name>
+
+    <modules>
+        <module>api-gateway</module>
+        <module>ms-eventos</module>
+        <module>ms-reservas</module>
+        <module>ms-compras</module>
+        <module>ms-pagos</module>
+    </modules>
+</project>
