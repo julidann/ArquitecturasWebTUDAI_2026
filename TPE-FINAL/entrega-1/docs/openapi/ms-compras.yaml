@@ -1,0 +1,731 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-compras
+  description: |
+    Orquesta la compra: valida la reserva, cobra a través de ms-pagos, confirma la
+    reserva en ms-reservas y emite las entradas con su código QR. También gestiona
+    las devoluciones y la cancelación de eventos.
+
+    `POST /compras` exige el encabezado **Idempotency-Key**: si el cliente reintenta
+    (por ejemplo, por un corte de conexión) con la misma clave, recibe el resultado
+    original y no se le cobra dos veces.
+  version: 1.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8083
+  description: Directo al microservicio
+tags:
+- name: Devoluciones
+  description: Resolución de solicitudes de devolución (administradores)
+- name: Entradas
+  description: "Entradas emitidas, su código QR y pedidos de devolución"
+- name: Compras
+  description: Pago de una reserva y emisión de entradas
+- name: Interno
+  description: Endpoints entre microservicios (no expuestos por el gateway)
+paths:
+  /internal/eventos/{eventoId}/cancelacion:
+    post:
+      tags:
+      - Interno
+      summary: "[Interno] Procesar la cancelación de un evento (lo invoca ms-eventos)"
+      description: Pasa todas las entradas válidas a CANCELADA y pide el reintegro
+        de cada una. Idempotente.
+      operationId: cancelar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelacionEventoRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelacionEventoResponse"
+  /entradas/{id}/devolucion:
+    post:
+      tags:
+      - Entradas
+      summary: Solicitar la devolución de una entrada
+      description: Se puede pedir hasta 72 horas antes del evento. Queda PENDIENTE
+        hasta que un administrador la resuelva.
+      operationId: solicitarDevolucion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevolucionRequest"
+      responses:
+        "422":
+          description: Faltan menos de 72 horas para el evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: Solicitud creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolicitudDevolucionResponse"
+        "403":
+          description: La entrada es de otro usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La entrada no está válida o ya tiene una solicitud pendiente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /devoluciones/{id}/rechazar:
+    post:
+      tags:
+      - Devoluciones
+      summary: Rechazar una devolución (ADMIN)
+      operationId: rechazar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolucionRequest"
+      responses:
+        "403":
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La solicitud ya fue resuelta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /devoluciones/{id}/aprobar:
+    post:
+      tags:
+      - Devoluciones
+      summary: Aprobar una devolución (ADMIN)
+      description: Libera el lugar en ms-reservas y pide el reintegro del precio de
+        la entrada a ms-pagos.
+      operationId: aprobar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+        example: ADMIN
+      responses:
+        "403":
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La solicitud ya fue resuelta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Devolución aprobada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolicitudDevolucionResponse"
+        "503":
+          description: ms-reservas o ms-pagos no disponibles (se puede reintentar)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /compras:
+    get:
+      tags:
+      - Compras
+      summary: Mis compras
+      operationId: mias_1
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompraResponse"
+    post:
+      tags:
+      - Compras
+      summary: Pagar una reserva
+      description: |-
+        Cobra la reserva y, si el pago se aprueba, emite una entrada con código QR por cada lugar.
+        Hay que enviar una **Idempotency-Key** única por intento de compra (ej: un UUID generado por la app).
+        Si se reenvía la misma clave se devuelve el resultado original (200) sin volver a cobrar; si la
+        compra había quedado en ERROR, se reintenta.
+      operationId: comprar
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 100
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+        example: 3f6c1b8e-2a41-4d0c-9b7e-5e2f0a1c9d33
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompraRequest"
+        required: true
+      responses:
+        "422":
+          description: La Idempotency-Key ya se usó para otra compra
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: La reserva es de otro usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Falló otro servicio; la compra queda en ERROR y se puede reintentar
+            con la misma clave
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraResponse"
+        "409":
+          description: "Reserva vencida/liberada, compra en proceso o ya existe una\
+            \ compra para la reserva"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe la reserva
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: "Pago aprobado, entradas emitidas"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraResponse"
+        "402":
+          description: Pago rechazado; la reserva se liberó (el cuerpo es la compra
+            RECHAZADA)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraResponse"
+        "200":
+          description: "Reintento con la misma Idempotency-Key: resultado original"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraResponse"
+  /entradas:
+    get:
+      tags:
+      - Entradas
+      summary: Mis entradas
+      operationId: mias
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntradaResponse"
+  /entradas/{id}:
+    get:
+      tags:
+      - Entradas
+      summary: Detalle de una entrada
+      operationId: obtener
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "403":
+          description: La entrada es de otro usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /entradas/{id}/qr:
+    get:
+      tags:
+      - Entradas
+      summary: Imagen PNG del código QR de la entrada
+      operationId: qr
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Imagen PNG
+          content:
+            image/png: {}
+  /devoluciones:
+    get:
+      tags:
+      - Devoluciones
+      summary: Listar solicitudes de devolución
+      description: Un ADMIN ve todas; cualquier otro rol ve solo las propias.
+      operationId: listar
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+        example: ADMIN
+      - name: estado
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDIENTE
+          - APROBADA
+          - RECHAZADA
+        example: PENDIENTE
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SolicitudDevolucionResponse"
+  /compras/{id}:
+    get:
+      tags:
+      - Compras
+      summary: Detalle de una compra (con sus entradas)
+      operationId: obtener_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "403":
+          description: La compra es de otro usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    CancelacionEventoRequest:
+      type: object
+      properties:
+        motivo:
+          type: string
+    CancelacionEventoResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        entradasCanceladas:
+          type: integer
+          format: int32
+          example: 120
+        reintegrosSolicitados:
+          type: integer
+          format: int32
+          example: 120
+        reintegrosFallidos:
+          type: integer
+          description: Reintegros que fallaron; se reprocesan si se vuelve a llamar
+          format: int32
+          example: 0
+        compradoresNotificados:
+          type: integer
+          format: int32
+          example: 45
+    DevolucionRequest:
+      type: object
+      properties:
+        motivo:
+          maxLength: 500
+          minLength: 0
+          type: string
+          example: No puedo asistir por un viaje de trabajo
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: La devolución solo se puede pedir hasta 72 horas antes del evento
+        path:
+          type: string
+          example: /entradas/31/devolucion
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    SolicitudDevolucionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 5
+        entradaId:
+          type: integer
+          format: int64
+          example: 31
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        usuarioId:
+          type: integer
+          format: int64
+          example: 100
+        montoAReintegrar:
+          type: number
+          example: 45000.0
+        motivo:
+          type: string
+          example: No puedo asistir
+        estado:
+          type: string
+          example: PENDIENTE
+          enum:
+          - PENDIENTE
+          - APROBADA
+          - RECHAZADA
+        solicitadaEn:
+          type: string
+          format: date-time
+        resueltaEn:
+          type: string
+          format: date-time
+        resueltaPor:
+          type: integer
+          format: int64
+          example: 1
+        observacion:
+          type: string
+          example: "null"
+        reintegroId:
+          type: integer
+          format: int64
+          example: 4
+    ResolucionRequest:
+      type: object
+      properties:
+        observacion:
+          maxLength: 500
+          minLength: 0
+          type: string
+          example: "La entrada fue transferida, no corresponde devolución"
+    CompraRequest:
+      required:
+      - medioPago
+      - reservaId
+      type: object
+      properties:
+        reservaId:
+          type: integer
+          description: Reserva PENDIENTE obtenida en POST /reservas
+          format: int64
+          example: 15
+        medioPago:
+          $ref: "#/components/schemas/DatosMedioPago"
+    DatosMedioPago:
+      required:
+      - tipo
+      type: object
+      properties:
+        tipo:
+          type: string
+          example: TARJETA_CREDITO
+          enum:
+          - TARJETA_CREDITO
+          - TARJETA_DEBITO
+          - MERCADO_PAGO
+        numeroTarjeta:
+          pattern: "\\d{13,19}"
+          type: string
+          example: "4509953566233704"
+        titular:
+          type: string
+          example: Juan Perez
+        cuotas:
+          maximum: 12
+          minimum: 1
+          type: integer
+          format: int32
+          example: 1
+      description: "Medio de pago. Tarjetas de prueba del mock: terminada en 0002\
+        \ = rechazada, cualquier otra = aprobada."
+    CompraResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 21
+        usuarioId:
+          type: integer
+          format: int64
+          example: 100
+        reservaId:
+          type: integer
+          format: int64
+          example: 15
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        nombreEvento:
+          type: string
+          example: Los Piojos - Ritual 2026
+        cantidad:
+          type: integer
+          format: int32
+          example: 2
+        montoTotal:
+          type: number
+          example: 90000.0
+        medioPago:
+          type: string
+          example: TARJETA_CREDITO
+          enum:
+          - TARJETA_CREDITO
+          - TARJETA_DEBITO
+          - MERCADO_PAGO
+        ultimosDigitos:
+          type: string
+          example: "3704"
+        pagoId:
+          type: integer
+          format: int64
+          example: 8
+        estado:
+          type: string
+          example: APROBADA
+          enum:
+          - PENDIENTE
+          - APROBADA
+          - RECHAZADA
+          - ERROR
+        detalle:
+          type: string
+          description: "Motivo de rechazo o error, si lo hay"
+          example: "null"
+        creadaEn:
+          type: string
+          format: date-time
+        entradas:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntradaResponse"
+    EntradaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 31
+        compraId:
+          type: integer
+          format: int64
+          example: 21
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        nombreEvento:
+          type: string
+          example: Los Piojos - Ritual 2026
+        fechaEvento:
+          type: string
+          format: date-time
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        sector:
+          type: string
+          example: Platea Baja
+        asientoId:
+          type: integer
+          format: int64
+          example: 57
+        fila:
+          type: string
+          example: C
+        numero:
+          type: integer
+          format: int32
+          example: 12
+        precio:
+          type: number
+          example: 45000.0
+        codigoQr:
+          type: string
+          example: 6f1c2a9e-3d4b-4f7a-9c1e-2b8d5e0a7f31
+        estado:
+          type: string
+          example: VALIDA
+          enum:
+          - VALIDA
+          - DEVUELTA
+          - CANCELADA
+          - UTILIZADA
+        emitidaEn:
+          type: string
+          format: date-time
