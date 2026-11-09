@@ -1,0 +1,38 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: ms-pagos
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagos_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+
+pasarela:
+  # latencia simulada de la pasarela externa
+  demora-ms: 300
+  monto-maximo: 5000000
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.ticketya: INFO
