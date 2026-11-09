@@ -1,0 +1,110 @@
+server:
+  port: 8080
+
+servicios:
+  eventos: http://localhost:8081
+  reservas: http://localhost:8082
+  compras: http://localhost:8083
+  pagos: http://localhost:8084
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # timeouts hacia los microservicios
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 10s
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:5173"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+      routes:
+        # Endpoints que solo usan otros microservicios: el gateway no los expone
+        # (confirmar/liberar reservas, liberar lugares vendidos). Los /internal/** ni siquiera tienen ruta.
+        - id: bloquear-internos
+          uri: no://op
+          predicates:
+            - Path=/api/reservas/*/confirmar,/api/reservas/*/liberar,/api/disponibilidad/eventos/*/liberaciones
+          filters:
+            - SetStatus=404
+
+        - id: eventos
+          uri: ${servicios.eventos}
+          predicates:
+            - Path=/api/eventos/**,/api/lugares/**
+          filters:
+            - StripPrefix=1
+
+        - id: reservas
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/api/reservas/**
+          filters:
+            - StripPrefix=1
+
+        # de la disponibilidad solo se exponen las consultas (la inicializacion la hace ms-eventos)
+        - id: disponibilidad
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/api/disponibilidad/**
+            - Method=GET
+          filters:
+            - StripPrefix=1
+
+        - id: compras
+          uri: ${servicios.compras}
+          predicates:
+            - Path=/api/compras/**,/api/entradas/**,/api/devoluciones/**
+          filters:
+            - StripPrefix=1
+
+        # documentacion OpenAPI de cada servicio, para el Swagger UI unificado del gateway
+        - id: docs-eventos
+          uri: ${servicios.eventos}
+          predicates:
+            - Path=/docs/eventos/v3/api-docs
+          filters:
+            - RewritePath=/docs/eventos/(?<resto>.*), /$\{resto}
+        - id: docs-reservas
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/docs/reservas/v3/api-docs
+          filters:
+            - RewritePath=/docs/reservas/(?<resto>.*), /$\{resto}
+        - id: docs-compras
+          uri: ${servicios.compras}
+          predicates:
+            - Path=/docs/compras/v3/api-docs
+          filters:
+            - RewritePath=/docs/compras/(?<resto>.*), /$\{resto}
+        - id: docs-pagos
+          uri: ${servicios.pagos}
+          predicates:
+            - Path=/docs/pagos/v3/api-docs
+          filters:
+            - RewritePath=/docs/pagos/(?<resto>.*), /$\{resto}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: ms-eventos
+        url: /docs/eventos/v3/api-docs
+      - name: ms-reservas
+        url: /docs/reservas/v3/api-docs
+      - name: ms-compras
+        url: /docs/compras/v3/api-docs
+      - name: ms-pagos
+        url: /docs/pagos/v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
