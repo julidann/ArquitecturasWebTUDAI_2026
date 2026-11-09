@@ -1,0 +1,906 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-eventos
+  description: |
+    Catálogo de lugares y eventos: alta de lugares con sus sectores, creación de eventos
+    en borrador, definición de precios por sector, publicación, suspensión/cancelación
+    y búsqueda por múltiples criterios.
+
+    **Entrega 1:** no hay autenticación. El usuario se identifica con los encabezados
+    `X-Usuario-Id` y `X-Rol` (CLIENTE, ORGANIZADOR, ADMIN, ACCESO).
+  version: 1.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8081
+  description: Directo al microservicio
+tags:
+- name: Eventos
+  description: "Alta, publicación, cancelación y búsqueda de eventos"
+- name: Lugares
+  description: "Estadios, teatros y salas con sus sectores"
+- name: Interno
+  description: Endpoints entre microservicios (no expuestos por el gateway)
+paths:
+  /eventos/{id}:
+    get:
+      tags:
+      - Eventos
+      summary: Detalle de un evento
+      operationId: obtener_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "404":
+          description: No existe el evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+      - Eventos
+      summary: Modificar un evento en borrador
+      operationId: actualizar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventoRequest"
+        required: true
+      responses:
+        "403":
+          description: No es el organizador del evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El evento no está en borrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /eventos/{id}/precios:
+    put:
+      tags:
+      - Eventos
+      summary: Definir el precio de cada sector
+      description: Se puede llamar varias veces mientras el evento está en borrador;
+        los precios se pisan por sector.
+      operationId: definirPrecios
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreciosRequest"
+        required: true
+      responses:
+        "409":
+          description: Sector ajeno al lugar o evento no está en borrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /lugares:
+    get:
+      tags:
+      - Lugares
+      summary: Listar lugares
+      description: Opcionalmente filtra por ciudad.
+      operationId: listar
+      parameters:
+      - name: ciudad
+        in: query
+        required: false
+        schema:
+          type: string
+        example: Tandil
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LugarResponse"
+    post:
+      tags:
+      - Lugares
+      summary: Crear un lugar
+      description: "Da de alta un lugar con sus sectores. Para los sectores numerados\
+        \ se generan los asientos automáticamente (filas A, B, C... y números 1..N).\
+        \ Requiere rol ORGANIZADOR o ADMIN."
+      operationId: crear
+      parameters:
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+        example: ORGANIZADOR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LugarRequest"
+        required: true
+      responses:
+        "403":
+          description: El rol no puede crear lugares
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: Lugar creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LugarResponse"
+        "400":
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /internal/eventos/{id}/disponible:
+    post:
+      tags:
+      - Interno
+      summary: Volver un evento AGOTADO a PUBLICADO cuando se liberan lugares (lo
+        invoca ms-reservas)
+      operationId: disponible
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+  /internal/eventos/{id}/agotado:
+    post:
+      tags:
+      - Interno
+      summary: Marcar evento como AGOTADO (lo invoca ms-reservas)
+      operationId: agotado
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+  /eventos:
+    get:
+      tags:
+      - Eventos
+      summary: Buscar eventos
+      description: "Búsqueda por múltiples criterios combinables. Solo devuelve eventos\
+        \ PUBLICADOS o AGOTADOS. Orden: `fecha` (default), `precio` (precio mínimo\
+        \ del evento) o `relevancia` (coincidencias del texto `q` en nombre, participantes\
+        \ y descripción)."
+      operationId: buscar
+      parameters:
+      - name: q
+        in: query
+        description: Texto libre
+        required: false
+        schema:
+          type: string
+        example: piojos
+      - name: tipo
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - RECITAL
+          - FESTIVAL
+          - TEATRO
+          - DEPORTE
+          - CONFERENCIA
+          - OTRO
+        example: RECITAL
+      - name: organizadorId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+        example: 10
+      - name: participante
+        in: query
+        required: false
+        schema:
+          type: string
+        example: Los Piojos
+      - name: ciudad
+        in: query
+        required: false
+        schema:
+          type: string
+        example: La Plata
+      - name: desde
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        example: 2026-12-01
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        example: 2026-12-31
+      - name: orden
+        in: query
+        description: fecha | precio | relevancia
+        required: false
+        schema:
+          type: string
+        example: fecha
+      - name: direccion
+        in: query
+        description: asc | desc
+        required: false
+        schema:
+          type: string
+          default: asc
+        example: asc
+      - name: pagina
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: tamanio
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "400":
+          description: "Parámetros inválidos (ej: orden desconocido o rango de fechas\
+            \ invertido)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Página de resultados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaResponseEventoResponse"
+    post:
+      tags:
+      - Eventos
+      summary: Crear evento (queda en BORRADOR)
+      description: El organizador es el usuario del header X-Usuario-Id. Requiere
+        rol ORGANIZADOR o ADMIN.
+      operationId: crear_1
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 10
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+        example: ORGANIZADOR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventoRequest"
+        required: true
+      responses:
+        "201":
+          description: Evento creado en borrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoResponse"
+        "404":
+          description: No existe el lugar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Rol no autorizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /eventos/{id}/suspender:
+    post:
+      tags:
+      - Eventos
+      summary: Suspender un evento (solo ADMIN)
+      description: Frena las ventas sin cancelar las entradas ya vendidas.
+      operationId: suspender
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CambioEstadoRequest"
+      responses:
+        "403":
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /eventos/{id}/reanudar:
+    post:
+      tags:
+      - Eventos
+      summary: Reanudar un evento suspendido (solo ADMIN)
+      operationId: reanudar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoResponse"
+  /eventos/{id}/publicar:
+    post:
+      tags:
+      - Eventos
+      summary: Publicar un evento
+      description: Requiere que todos los sectores del lugar tengan precio. Al publicar
+        se crea el inventario de lugares en ms-reservas y el evento queda visible
+        en las búsquedas.
+      operationId: publicar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Evento publicado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoResponse"
+        "409":
+          description: Faltan precios o el evento no está en borrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: ms-reservas no respondió; el evento sigue en borrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /eventos/{id}/cancelar:
+    post:
+      tags:
+      - Eventos
+      summary: Cancelar un evento (solo ADMIN)
+      description: Deshabilita la venta y todas las entradas vendidas pasan a reintegro
+        (ms-compras solicita el reintegro a la pasarela de pagos). Es idempotente.
+      operationId: cancelar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Rol
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CambioEstadoRequest"
+      responses:
+        "403":
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El evento ya finalizó
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /lugares/{id}:
+    get:
+      tags:
+      - Lugares
+      summary: Obtener un lugar con sus sectores
+      operationId: obtener
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LugarResponse"
+        "404":
+          description: No existe el lugar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /lugares/{id}/sectores/{sectorId}/asientos:
+    get:
+      tags:
+      - Lugares
+      summary: Listar los asientos de un sector numerado
+      description: "Devuelve la grilla de asientos del lugar (sin estado). El estado\
+        \ de cada asiento para un evento se consulta en ms-reservas: GET /disponibilidad/eventos/{eventoId}/sectores/{sectorId}/asientos"
+      operationId: asientos
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: sectorId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "404":
+          description: No existe el lugar o el sector
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    EventoRequest:
+      required:
+      - fechaHora
+      - lugarId
+      - nombre
+      - tipo
+      type: object
+      properties:
+        nombre:
+          type: string
+          example: Los Piojos - Ritual 2026
+        descripcion:
+          type: string
+          example: Show de regreso en el Estadio Único
+        tipo:
+          type: string
+          example: RECITAL
+          enum:
+          - RECITAL
+          - FESTIVAL
+          - TEATRO
+          - DEPORTE
+          - CONFERENCIA
+          - OTRO
+        participantes:
+          type: array
+          example:
+          - Los Piojos
+          items:
+            type: string
+            example: "[\"Los Piojos\"]"
+        fechaHora:
+          type: string
+          format: date-time
+        lugarId:
+          type: integer
+          format: int64
+          example: 1
+        altaDemanda:
+          type: boolean
+          description: "Si es true, en la entrega 2 se usa fila virtual"
+          example: false
+        limiteEntradasPorCliente:
+          maximum: 20
+          minimum: 1
+          type: integer
+          description: Maximo de entradas por cliente para el evento (default 6)
+          format: int32
+          example: 4
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: El evento no tiene precio definido para todos los sectores
+        path:
+          type: string
+          example: /eventos/1/publicar
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    PrecioSectorRequest:
+      required:
+      - precio
+      - sectorId
+      type: object
+      properties:
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        precio:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+          example: 45000.0
+    PreciosRequest:
+      required:
+      - precios
+      type: object
+      properties:
+        precios:
+          type: array
+          items:
+            $ref: "#/components/schemas/PrecioSectorRequest"
+    LugarRequest:
+      required:
+      - ciudad
+      - direccion
+      - nombre
+      - sectores
+      type: object
+      properties:
+        nombre:
+          type: string
+          example: Teatro del Lago
+        direccion:
+          type: string
+          example: Av. Colón 1234
+        ciudad:
+          type: string
+          example: Tandil
+        latitud:
+          type: number
+          format: double
+          example: -37.3217
+        longitud:
+          type: number
+          format: double
+          example: -59.1332
+        sectores:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorRequest"
+    SectorRequest:
+      required:
+      - nombre
+      - tipo
+      type: object
+      properties:
+        nombre:
+          type: string
+          example: Platea Baja
+        tipo:
+          type: string
+          example: NUMERADO
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        capacidad:
+          minimum: 1
+          type: integer
+          description: Solo para NO_NUMERADO
+          format: int32
+          example: 5000
+        filas:
+          minimum: 1
+          type: integer
+          description: Solo para NUMERADO
+          format: int32
+          example: 10
+        asientosPorFila:
+          minimum: 1
+          type: integer
+          description: Solo para NUMERADO
+          format: int32
+          example: 20
+      description: Sector de un lugar. Para NUMERADO se indican filas y asientos por
+        fila; para NO_NUMERADO la capacidad.
+    LugarResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        nombre:
+          type: string
+          example: Teatro del Lago
+        direccion:
+          type: string
+          example: Av. Colón 1234
+        ciudad:
+          type: string
+          example: Tandil
+        latitud:
+          type: number
+          format: double
+          example: -37.3217
+        longitud:
+          type: number
+          format: double
+          example: -59.1332
+        sectores:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorResponse"
+    SectorResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 3
+        nombre:
+          type: string
+          example: Platea Baja
+        tipo:
+          type: string
+          example: NUMERADO
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        capacidad:
+          type: integer
+          format: int32
+          example: 200
+    EventoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        nombre:
+          type: string
+          example: Los Piojos - Ritual 2026
+        descripcion:
+          type: string
+          example: Show de regreso en el Estadio Único
+        tipo:
+          type: string
+          example: RECITAL
+          enum:
+          - RECITAL
+          - FESTIVAL
+          - TEATRO
+          - DEPORTE
+          - CONFERENCIA
+          - OTRO
+        organizadorId:
+          type: integer
+          format: int64
+          example: 10
+        participantes:
+          type: array
+          items:
+            type: string
+        fechaHora:
+          type: string
+          format: date-time
+        lugar:
+          $ref: "#/components/schemas/LugarResumen"
+        estado:
+          type: string
+          example: PUBLICADO
+          enum:
+          - BORRADOR
+          - PUBLICADO
+          - AGOTADO
+          - SUSPENDIDO
+          - CANCELADO
+          - FINALIZADO
+        altaDemanda:
+          type: boolean
+        limiteEntradasPorCliente:
+          type: integer
+          format: int32
+          example: 4
+        precioMinimo:
+          type: number
+          example: 25000.0
+        precios:
+          type: array
+          items:
+            $ref: "#/components/schemas/PrecioSectorResponse"
+    LugarResumen:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        nombre:
+          type: string
+          example: Estadio Único
+        ciudad:
+          type: string
+          example: La Plata
+    PrecioSectorResponse:
+      type: object
+      properties:
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        sector:
+          type: string
+          example: Platea Baja
+        tipo:
+          type: string
+          example: NUMERADO
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        precio:
+          type: number
+          example: 45000.0
+    CambioEstadoRequest:
+      type: object
+      properties:
+        motivo:
+          type: string
+          example: El artista suspendió la gira por problemas de salud
+    PaginaResponseEventoResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventoResponse"
+        pagina:
+          type: integer
+          format: int32
+          example: 0
+        tamanio:
+          type: integer
+          format: int32
+          example: 10
+        totalElementos:
+          type: integer
+          format: int64
+          example: 23
+        totalPaginas:
+          type: integer
+          format: int32
+          example: 3
+      description: Resultado paginado

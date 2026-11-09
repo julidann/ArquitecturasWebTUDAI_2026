@@ -1,0 +1,40 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ms-eventos
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eventos_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+
+servicios:
+  timeout-ms: 3000
+  reservas:
+    url: http://localhost:8082
+  compras:
+    url: http://localhost:8083
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.ticketya: INFO
