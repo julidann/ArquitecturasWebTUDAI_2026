@@ -1,0 +1,2102 @@
+{
+  "info": {
+    "_postman_id": "5b085454-acc6-5f07-804b-9854299958ec",
+    "name": "TicketYa - Entrega 1",
+    "description": "Requests para probar los endpoints de la entrega 1 a través del API Gateway.\n\nLas carpetas están pensadas para correrse en orden (Runner): cada request guarda en variables de la colección los ids que usan los siguientes. Antes conviene correr scripts/datos-prueba.sh para tener eventos cargados en las búsquedas.\n\nEntrega 1 sin autenticación: el usuario se indica con los headers X-Usuario-Id y X-Rol.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1 - Lugares",
+      "item": [
+        {
+          "name": "Crear lugar (estadio con campo y plateas)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/lugares",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "lugares"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Estadio Ciudad de Prueba\",\n  \"direccion\": \"Av. Siempre Viva 742\",\n  \"ciudad\": \"Olavarría\",\n  \"latitud\": -36.8927,\n  \"longitud\": -60.3225,\n  \"sectores\": [\n    {\n      \"nombre\": \"Campo\",\n      \"tipo\": \"NO_NUMERADO\",\n      \"capacidad\": 100\n    },\n    {\n      \"nombre\": \"Platea\",\n      \"tipo\": \"NUMERADO\",\n      \"filas\": 4,\n      \"asientosPorFila\": 10\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "const l = pm.response.json();",
+                  "pm.collectionVariables.set(\"lugarId\", l.id);",
+                  "pm.collectionVariables.set(\"sectorCampoId\", l.sectores.find(s => s.tipo === \"NO_NUMERADO\").id);",
+                  "pm.collectionVariables.set(\"sectorPlateaId\", l.sectores.find(s => s.tipo === \"NUMERADO\").id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar lugares por ciudad",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/lugares?ciudad=Olavarría",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "lugares"
+              ],
+              "query": [
+                {
+                  "key": "ciudad",
+                  "value": "Olavarría"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle de un lugar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/lugares/{{lugarId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "lugares",
+                "{{lugarId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asientos de un sector numerado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/lugares/{{lugarId}}/sectores/{{sectorPlateaId}}/asientos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "lugares",
+                "{{lugarId}}",
+                "sectores",
+                "{{sectorPlateaId}}",
+                "asientos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Cliente no puede crear lugares",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              },
+              {
+                "key": "X-Rol",
+                "value": "CLIENTE"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/lugares",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "lugares"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"X\",\n  \"direccion\": \"X\",\n  \"ciudad\": \"X\",\n  \"sectores\": [\n    {\n      \"nombre\": \"A\",\n      \"tipo\": \"NO_NUMERADO\",\n      \"capacidad\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 - Eventos (organizador)",
+      "item": [
+        {
+          "name": "Crear evento en borrador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "10"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Recital de Prueba Postman\",\n  \"descripcion\": \"Evento creado desde la colección\",\n  \"tipo\": \"RECITAL\",\n  \"participantes\": [\n    \"Banda Postman\"\n  ],\n  \"fechaHora\": \"{{fechaEvento}}\",\n  \"lugarId\": \"{{lugarId}}\",\n  \"altaDemanda\": false,\n  \"limiteEntradasPorCliente\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const f = new Date(Date.now() + 30*24*3600*1000); f.setHours(21,0,0,0);",
+                  "pm.collectionVariables.set(\"fechaEvento\", f.toISOString().substring(0,19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"eventoId\", pm.response.json().id);",
+                  "pm.test(\"queda en BORRADOR\", () => pm.expect(pm.response.json().estado).to.eql(\"BORRADOR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Publicar sin precios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "10"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/publicar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "publicar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Definir precios por sector",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "10"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/precios",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "precios"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"precios\": [\n    {\n      \"sectorId\": \"{{sectorCampoId}}\",\n      \"precio\": 25000\n    },\n    {\n      \"sectorId\": \"{{sectorPlateaId}}\",\n      \"precio\": 40000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Otro organizador no puede publicarlo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "99"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/publicar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "publicar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar evento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "10"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/publicar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "publicar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"PUBLICADO\", () => pm.expect(pm.response.json().estado).to.eql(\"PUBLICADO\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle del evento",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 - Búsqueda",
+      "item": [
+        {
+          "name": "Todos los publicados (orden por fecha)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Por tipo y ciudad",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?tipo=RECITAL&ciudad=La Plata",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "RECITAL"
+                },
+                {
+                  "key": "ciudad",
+                  "value": "La Plata"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Por participante",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?participante=piojos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "participante",
+                  "value": "piojos"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Por organizador",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?organizadorId=11",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "organizadorId",
+                  "value": "11"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rango de fechas ordenado por precio desc",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?desde=2026-01-01&hasta=2027-12-31&orden=precio&direccion=desc",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "desde",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "hasta",
+                  "value": "2027-12-31"
+                },
+                {
+                  "key": "orden",
+                  "value": "precio"
+                },
+                {
+                  "key": "direccion",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Texto libre por relevancia",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?q=rock piojos&orden=relevancia",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "rock piojos"
+                },
+                {
+                  "key": "orden",
+                  "value": "relevancia"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paginado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?pagina=0&tamanio=2",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "0"
+                },
+                {
+                  "key": "tamanio",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Orden inválido",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/eventos?orden=nombre",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "orden",
+                  "value": "nombre"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 - Compra de entrada numerada",
+      "item": [
+        {
+          "name": "Disponibilidad por sector",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/disponibilidad/eventos/{{eventoId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "disponibilidad",
+                "eventos",
+                "{{eventoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mapa de asientos de la platea",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/disponibilidad/eventos/{{eventoId}}/sectores/{{sectorPlateaId}}/asientos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "disponibilidad",
+                "eventos",
+                "{{eventoId}}",
+                "sectores",
+                "{{sectorPlateaId}}",
+                "asientos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const libres = pm.response.json().filter(a => a.estado === \"DISPONIBLE\");",
+                  "pm.collectionVariables.set(\"asiento1\", libres[0].asientoId);",
+                  "pm.collectionVariables.set(\"asiento2\", libres[1].asientoId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reservar 2 asientos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorPlateaId}},\n  \"asientoIds\": [{{asiento1}}, {{asiento2}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"reservaId\", pm.response.json().id);",
+                  "pm.test(\"PENDIENTE\", () => pm.expect(pm.response.json().estado).to.eql(\"PENDIENTE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Otro cliente intenta reservar el mismo asiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "200"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorPlateaId}},\n  \"asientoIds\": [{{asiento1}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pagar la reserva (aprobado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveCompra}}"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/compras",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{reservaId}}\",\n  \"medioPago\": {\n    \"tipo\": \"TARJETA_CREDITO\",\n    \"numeroTarjeta\": \"4509953566233704\",\n    \"titular\": \"Juan Perez\",\n    \"cuotas\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"claveCompra\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "const c = pm.response.json();",
+                  "pm.collectionVariables.set(\"compraId\", c.id);",
+                  "pm.collectionVariables.set(\"entradaId\", c.entradas[0].id);",
+                  "pm.test(\"2 entradas con QR\", () => pm.expect(c.entradas.length).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reintento con la misma Idempotency-Key (no cobra de nuevo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveCompra}}"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/compras",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{reservaId}}\",\n  \"medioPago\": {\n    \"tipo\": \"TARJETA_CREDITO\",\n    \"numeroTarjeta\": \"4509953566233704\",\n    \"titular\": \"Juan Perez\",\n    \"cuotas\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"misma compra\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"compraId\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mis compras",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/compras",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mis entradas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/entradas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "entradas"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "QR de la entrada (imagen PNG)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/entradas/{{entradaId}}/qr",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "entradas",
+                "{{entradaId}}",
+                "qr"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 - Compra en zona no numerada y errores",
+      "item": [
+        {
+          "name": "Reservar 2 lugares en el campo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "300"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorCampoId}},\n  \"cantidad\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"reservaRechazoId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pagar con tarjeta sin fondos (rechazado, libera la reserva)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "300"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/compras",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservaId\": \"{{reservaRechazoId}}\",\n  \"medioPago\": {\n    \"tipo\": \"TARJETA_DEBITO\",\n    \"numeroTarjeta\": \"4000000000000002\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 402\", () => pm.response.to.have.status(402));",
+                  "pm.test(\"RECHAZADA\", () => pm.expect(pm.response.json().estado).to.eql(\"RECHAZADA\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La reserva quedó LIBERADA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "300"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas/{{reservaRechazoId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaRechazoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"LIBERADA\", () => pm.expect(pm.response.json().estado).to.eql(\"LIBERADA\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Superar el límite de entradas por cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorCampoId}},\n  \"cantidad\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Elegir asientos en una zona no numerada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorCampoId}},\n  \"asientoIds\": [1]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Endpoint interno no expuesto por el gateway",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/reservas/{{reservaId}}/confirmar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaId}}",
+                "confirmar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reservar y cancelar antes de pagar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "400"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorCampoId}},\n  \"cantidad\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"reservaCancelarId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancelar mi reserva",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "400"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas/{{reservaCancelarId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaCancelarId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 - Devoluciones",
+      "item": [
+        {
+          "name": "Solicitar devolución de una entrada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/entradas/{{entradaId}}/devolucion",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "entradas",
+                "{{entradaId}}",
+                "devolucion"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"No puedo asistir\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"solicitudId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Cliente no puede aprobar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              },
+              {
+                "key": "X-Rol",
+                "value": "CLIENTE"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/devoluciones/{{solicitudId}}/aprobar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "devoluciones",
+                "{{solicitudId}}",
+                "aprobar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Solicitudes pendientes (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/devoluciones?estado=PENDIENTE",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "devoluciones"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "PENDIENTE"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar devolución (libera el asiento y reintegra)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/devoluciones/{{solicitudId}}/aprobar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "devoluciones",
+                "{{solicitudId}}",
+                "aprobar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"APROBADA\", () => pm.expect(pm.response.json().estado).to.eql(\"APROBADA\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La entrada quedó DEVUELTA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/entradas/{{entradaId}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "entradas",
+                "{{entradaId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"DEVUELTA\", () => pm.expect(pm.response.json().estado).to.eql(\"DEVUELTA\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Volver a resolverla",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/devoluciones/{{solicitudId}}/rechazar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "devoluciones",
+                "{{solicitudId}}",
+                "rechazar"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacion\": \"ya resuelta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7 - Administración de eventos",
+      "item": [
+        {
+          "name": "Suspender evento (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/suspender",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "suspender"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Revisión de seguridad del estadio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"SUSPENDIDO\", () => pm.expect(pm.response.json().estado).to.eql(\"SUSPENDIDO\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] No se puede reservar un evento suspendido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "500"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/reservas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventoId\": {{eventoId}},\n  \"sectorId\": {{sectorCampoId}},\n  \"cantidad\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reanudar evento (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/reanudar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "reanudar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Error] Organizador no puede cancelar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "10"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ORGANIZADOR"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/cancelar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "cancelar"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancelar evento (reintegra todas las entradas)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Usuario-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Rol",
+                "value": "ADMIN"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/eventos/{{eventoId}}/cancelar",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "eventos",
+                "{{eventoId}}",
+                "cancelar"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"El artista suspendió la gira\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CANCELADO\", () => pm.expect(pm.response.json().estado).to.eql(\"CANCELADO\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Las entradas quedaron CANCELADAS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Usuario-Id",
+                "value": "100"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/entradas",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "entradas"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "gateway",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "lugarId",
+      "value": ""
+    },
+    {
+      "key": "sectorCampoId",
+      "value": ""
+    },
+    {
+      "key": "sectorPlateaId",
+      "value": ""
+    },
+    {
+      "key": "eventoId",
+      "value": ""
+    },
+    {
+      "key": "fechaEvento",
+      "value": ""
+    },
+    {
+      "key": "asiento1",
+      "value": ""
+    },
+    {
+      "key": "asiento2",
+      "value": ""
+    },
+    {
+      "key": "reservaId",
+      "value": ""
+    },
+    {
+      "key": "claveCompra",
+      "value": ""
+    },
+    {
+      "key": "compraId",
+      "value": ""
+    },
+    {
+      "key": "entradaId",
+      "value": ""
+    },
+    {
+      "key": "reservaRechazoId",
+      "value": ""
+    },
+    {
+      "key": "reservaCancelarId",
+      "value": ""
+    },
+    {
+      "key": "solicitudId",
+      "value": ""
+    }
+  ]
+}
