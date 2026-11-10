@@ -6,7 +6,14 @@ implementado con **microservicios Spring Boot** y un **API Gateway**.
 > **Entrega 1 - Core del sistema:** lugares y eventos, publicación, búsqueda por múltiples criterios, compra con
 > reserva temporal y emisión de QR, **no doble venta**, devoluciones y cancelación de eventos.
 
-**Integrantes:** _completar_
+**Integrantes:**
+
+* D'Annunzio Julieta
+* Mensa Matias
+* Parasuco Forturella Santiago
+* Sánchez Tomé Luciano 
+
+
 
 ## Contenido del repositorio
 
