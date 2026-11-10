@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    # LOCK_TIMEOUT alto para que con muchos hilos las transacciones esperen el lock en vez de fallar
+    url: jdbc:h2:mem:reservas_test;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=20000
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 30
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+servicios:
+  eventos:
+    url: http://localhost:18081
+
+reservas:
+  minutos-vigencia: 10
+  # en los tests el job se dispara a mano
+  intervalo-vencimiento-ms: 3600000
