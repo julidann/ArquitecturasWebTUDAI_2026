@@ -1,0 +1,649 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-reservas
+  description: |
+    Disponibilidad de lugares por evento y reservas temporales.
+
+    Es el servicio responsable de que **una entrada nunca se venda dos veces**: los
+    asientos y cupos se toman con UPDATEs condicionales en la base de datos, por lo
+    que el mecanismo funciona aun con varias instancias del servicio.
+
+    Una reserva queda PENDIENTE durante 10 minutos (configurable); si no se confirma
+    el pago en ese tiempo pasa a VENCIDA y los lugares se liberan.
+  version: 1.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8082
+  description: Directo al microservicio
+tags:
+- name: Reservas
+  description: Reserva temporal de lugares mientras el cliente paga
+- name: Disponibilidad
+  description: Inventario de lugares por evento
+paths:
+  /reservas:
+    get:
+      tags:
+      - Reservas
+      summary: Mis reservas
+      description: "Reservas del usuario del header, opcionalmente por estado."
+      operationId: mias
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: estado
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDIENTE
+          - CONFIRMADA
+          - LIBERADA
+          - VENCIDA
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReservaResponse"
+    post:
+      tags:
+      - Reservas
+      summary: Reservar lugares
+      description: "Bloquea los asientos elegidos (sector numerado) o una cantidad\
+        \ de lugares (sector no numerado) durante 10 minutos. Es todo o nada: si alguno\
+        \ de los asientos ya no está libre no se reserva ninguno."
+      operationId: crear
+      parameters:
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 100
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservaRequest"
+        required: true
+      responses:
+        "201":
+          description: Reserva creada en estado PENDIENTE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservaResponse"
+        "400":
+          description: "Pedido inválido (ej: asientos en un sector no numerado)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Lugar no disponible o evento sin venta habilitada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Evento, sector o asiento inexistente"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Supera el límite de entradas por cliente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /reservas/{id}/liberar:
+    post:
+      tags:
+      - Reservas
+      summary: "[Interno] Liberar reserva (pago rechazado)"
+      description: Lo invoca ms-compras. Devuelve los lugares al inventario. Idempotente.
+      operationId: liberar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "409":
+          description: La reserva ya fue confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /reservas/{id}/confirmar:
+    post:
+      tags:
+      - Reservas
+      summary: "[Interno] Confirmar reserva (pago aprobado)"
+      description: Lo invoca ms-compras. Pasa los lugares a VENDIDO. Idempotente.
+      operationId: confirmar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "409":
+          description: La reserva venció o fue liberada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Reserva confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservaResponse"
+  /disponibilidad/eventos/{eventoId}:
+    get:
+      tags:
+      - Disponibilidad
+      summary: Disponibilidad por sector de un evento
+      description: "Lugares libres por sector, calculados en tiempo real (no se cachea)."
+      operationId: consultar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisponibilidadResponse"
+        "404":
+          description: El evento no está publicado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+      - Disponibilidad
+      summary: "[Interno] Inicializar inventario de un evento"
+      description: "Lo invoca ms-eventos al publicar. Idempotente: 201 si se creó\
+        , 200 si ya existía."
+      operationId: inicializar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisponibilidadInicialRequest"
+        required: true
+      responses:
+        "200":
+          description: El inventario ya existía
+        "201":
+          description: Inventario creado
+  /disponibilidad/eventos/{eventoId}/liberaciones:
+    post:
+      tags:
+      - Disponibilidad
+      summary: "[Interno] Liberar un lugar vendido (devolución)"
+      description: "Lo invoca ms-compras cuando un administrador aprueba una devolució\
+        n. Requiere Idempotency-Key: un reintento con la misma clave no libera el\
+        \ lugar dos veces."
+      operationId: liberar_1
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LiberacionRequest"
+        required: true
+      responses:
+        "409":
+          description: La reserva no corresponde a una venta del evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "204":
+          description: Lugar liberado (o ya estaba liberado con esa clave)
+  /disponibilidad/eventos/{eventoId}/estado:
+    patch:
+      tags:
+      - Disponibilidad
+      summary: "[Interno] Habilitar o deshabilitar la venta"
+      description: "Lo invoca ms-eventos al suspender, reanudar o cancelar. Al deshabilitar\
+        \ se liberan las reservas pendientes."
+      operationId: cambiarEstado
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HabilitacionRequest"
+        required: true
+      responses:
+        "204":
+          description: Actualizado
+  /reservas/{id}:
+    get:
+      tags:
+      - Reservas
+      summary: Obtener una reserva
+      description: Si se envía X-Usuario-Id se valida que la reserva sea del usuario.
+        Los servicios internos lo omiten.
+      operationId: obtener
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "404":
+          description: No existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+      - Reservas
+      summary: Cancelar mi reserva
+      description: Libera los lugares antes de que venza.
+      operationId: cancelar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-Usuario-Id
+        in: header
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "409":
+          description: La reserva ya fue confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: La reserva es de otro usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /disponibilidad/eventos/{eventoId}/sectores/{sectorId}/asientos:
+    get:
+      tags:
+      - Disponibilidad
+      summary: Mapa de asientos de un sector numerado
+      description: "Estado de cada asiento para el evento: DISPONIBLE, RESERVADO o\
+        \ VENDIDO."
+      operationId: asientos
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: sectorId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "409":
+          description: El sector no es numerado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe el sector para el evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ReservaRequest:
+      required:
+      - eventoId
+      - sectorId
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        asientoIds:
+          type: array
+          example:
+          - 57
+          - 58
+          items:
+            type: integer
+            format: int64
+        cantidad:
+          minimum: 1
+          type: integer
+          format: int32
+          example: 2
+      description: Para sectores NUMERADOS se envian los asientoIds; para NO_NUMERADOS
+        la cantidad.
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: El asiento C-12 ya no está disponible
+        path:
+          type: string
+          example: /reservas
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    Item:
+      type: object
+      properties:
+        asientoId:
+          type: integer
+          format: int64
+          example: 57
+        fila:
+          type: string
+          example: C
+        numero:
+          type: integer
+          format: int32
+          example: 12
+    ReservaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 15
+        usuarioId:
+          type: integer
+          format: int64
+          example: 100
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        nombreEvento:
+          type: string
+          example: Los Piojos - Ritual 2026
+        fechaEvento:
+          type: string
+          format: date-time
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        sector:
+          type: string
+          example: Platea Baja
+        tipoSector:
+          type: string
+          example: NUMERADO
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        cantidad:
+          type: integer
+          format: int32
+          example: 2
+        precioUnitario:
+          type: number
+          example: 45000.0
+        montoTotal:
+          type: number
+          example: 90000.0
+        estado:
+          type: string
+          example: PENDIENTE
+          enum:
+          - PENDIENTE
+          - CONFIRMADA
+          - LIBERADA
+          - VENCIDA
+        creadaEn:
+          type: string
+          format: date-time
+        expiraEn:
+          type: string
+          format: date-time
+        segundosRestantes:
+          type: integer
+          description: Segundos que faltan para que venza (0 si no esta pendiente)
+          format: int64
+          example: 540
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+    AsientoInicial:
+      required:
+      - asientoId
+      - fila
+      - numero
+      type: object
+      properties:
+        asientoId:
+          type: integer
+          format: int64
+        fila:
+          type: string
+        numero:
+          type: integer
+          format: int32
+    DisponibilidadInicialRequest:
+      required:
+      - eventoId
+      - fechaEvento
+      - limitePorCliente
+      - nombreEvento
+      - sectores
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+        nombreEvento:
+          type: string
+        fechaEvento:
+          type: string
+          format: date-time
+        limitePorCliente:
+          type: integer
+          format: int32
+        sectores:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorInicial"
+    SectorInicial:
+      required:
+      - capacidad
+      - nombre
+      - precio
+      - sectorId
+      - tipo
+      type: object
+      properties:
+        sectorId:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        tipo:
+          type: string
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        precio:
+          type: number
+        capacidad:
+          type: integer
+          format: int32
+        asientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AsientoInicial"
+    LiberacionRequest:
+      required:
+      - cantidad
+      - reservaId
+      - sectorId
+      type: object
+      properties:
+        reservaId:
+          type: integer
+          format: int64
+          example: 15
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        asientoId:
+          type: integer
+          description: Solo para sectores numerados
+          format: int64
+          example: 57
+        cantidad:
+          minimum: 1
+          type: integer
+          format: int32
+          example: 1
+      description: Libera un lugar ya vendido (por una devolucion aprobada)
+    HabilitacionRequest:
+      required:
+      - habilitado
+      type: object
+      properties:
+        habilitado:
+          type: boolean
+        motivo:
+          type: string
+    DisponibilidadResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+          example: 1
+        nombreEvento:
+          type: string
+          example: Los Piojos - Ritual 2026
+        fechaEvento:
+          type: string
+          format: date-time
+        habilitado:
+          type: boolean
+          example: true
+        sectores:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorDisponible"
+    SectorDisponible:
+      type: object
+      properties:
+        sectorId:
+          type: integer
+          format: int64
+          example: 3
+        nombre:
+          type: string
+          example: Platea Baja
+        tipo:
+          type: string
+          example: NUMERADO
+          enum:
+          - NUMERADO
+          - NO_NUMERADO
+        precio:
+          type: number
+          example: 45000.0
+        capacidad:
+          type: integer
+          format: int32
+          example: 200
+        disponibles:
+          type: integer
+          format: int32
+          example: 137
