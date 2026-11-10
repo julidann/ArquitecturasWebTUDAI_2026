@@ -1,0 +1,311 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-pagos
+  description: |
+    Pasarela de pagos **simulada** para la entrega 1. Lo usa ms-compras (no se expone
+    al público a través del gateway salvo para consultas).
+
+    Tarjetas de prueba: terminada en `0002` → rechazada (fondos insuficientes),
+    terminada en `0069` → rechazada (tarjeta vencida), cualquier otra → aprobada.
+  version: 1.0.0
+servers:
+- url: http://localhost:8084
+  description: Directo al microservicio
+tags:
+- name: Pagos
+  description: Pasarela de pagos simulada (mock)
+paths:
+  /pagos:
+    get:
+      tags:
+      - Pagos
+      summary: Pagos de una compra
+      operationId: deCompra
+      parameters:
+      - name: compraId
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PagoResponse"
+    post:
+      tags:
+      - Pagos
+      summary: Cobrar
+      description: Registra un intento de cobro. La respuesta indica si fue APROBADO
+        o RECHAZADO (los dos casos son 201 porque el intento queda registrado). Reenviar
+        la misma Idempotency-Key devuelve el pago original con 200 y no se vuelve
+        a cobrar.
+      operationId: pagar
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+        example: compra-21
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PagoRequest"
+        required: true
+      responses:
+        "400":
+          description: Datos inválidos o falta Idempotency-Key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: La Idempotency-Key ya se usó con otros datos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: "Pedido repetido: se devuelve el pago original"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagoResponse"
+        "201":
+          description: Pago procesado (aprobado o rechazado)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagoResponse"
+  /pagos/{id}/reintegros:
+    post:
+      tags:
+      - Pagos
+      summary: Reintegrar (total o parcial)
+      description: Devuelve dinero de un pago aprobado. La suma de reintegros no puede
+        superar el monto cobrado. Idempotente por Idempotency-Key.
+      operationId: reintegrar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+        example: devolucion-5
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReintegroRequest"
+        required: true
+      responses:
+        "409":
+          description: El pago no está aprobado o el monto supera lo cobrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: Reintegro realizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintegroResponse"
+        "200":
+          description: "Pedido repetido: se devuelve el reintegro original"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintegroResponse"
+  /pagos/{id}:
+    get:
+      tags:
+      - Pagos
+      summary: Obtener un pago con sus reintegros
+      operationId: obtener
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "404":
+          description: No existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    DatosMedioPago:
+      required:
+      - tipo
+      type: object
+      properties:
+        tipo:
+          type: string
+          example: TARJETA_CREDITO
+          enum:
+          - TARJETA_CREDITO
+          - TARJETA_DEBITO
+          - MERCADO_PAGO
+        numeroTarjeta:
+          pattern: "\\d{13,19}"
+          type: string
+          example: "4509953566233704"
+        titular:
+          type: string
+          example: Juan Perez
+        cuotas:
+          maximum: 12
+          minimum: 1
+          type: integer
+          format: int32
+          example: 1
+      description: |-
+        Datos del medio de pago. En el mock, una tarjeta terminada en 0002 se rechaza por fondos
+        insuficientes y una terminada en 0069 por tarjeta vencida. Cualquier otra se aprueba.
+    PagoRequest:
+      required:
+      - compraId
+      - medioPago
+      - monto
+      - usuarioId
+      type: object
+      properties:
+        compraId:
+          type: integer
+          format: int64
+          example: 21
+        usuarioId:
+          type: integer
+          format: int64
+          example: 100
+        monto:
+          minimum: 0.01
+          exclusiveMinimum: false
+          type: number
+          example: 90000.0
+        medioPago:
+          $ref: "#/components/schemas/DatosMedioPago"
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: El monto a reintegrar supera lo cobrado
+        path:
+          type: string
+          example: /pagos/3/reintegros
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    PagoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 8
+        compraId:
+          type: integer
+          format: int64
+          example: 21
+        monto:
+          type: number
+          example: 90000.0
+        medioPago:
+          type: string
+          example: TARJETA_CREDITO
+          enum:
+          - TARJETA_CREDITO
+          - TARJETA_DEBITO
+          - MERCADO_PAGO
+        ultimosDigitos:
+          type: string
+          example: "3704"
+        estado:
+          type: string
+          example: APROBADO
+          enum:
+          - APROBADO
+          - RECHAZADO
+        codigoAutorizacion:
+          type: string
+          example: AUT-7F3K9Q
+        motivoRechazo:
+          type: string
+          example: "null"
+        totalReintegrado:
+          type: number
+          example: 0.0
+        creadoEn:
+          type: string
+          format: date-time
+        reintegros:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReintegroResponse"
+    ReintegroResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 4
+        pagoId:
+          type: integer
+          format: int64
+          example: 8
+        monto:
+          type: number
+          example: 45000.0
+        motivo:
+          type: string
+          example: Devolución aprobada de la entrada 31
+        estado:
+          type: string
+          example: APROBADO
+        creadoEn:
+          type: string
+          format: date-time
+    ReintegroRequest:
+      required:
+      - monto
+      type: object
+      properties:
+        monto:
+          minimum: 0.01
+          exclusiveMinimum: false
+          type: number
+          example: 45000.0
+        motivo:
+          type: string
+          example: Devolución aprobada de la entrada 31
