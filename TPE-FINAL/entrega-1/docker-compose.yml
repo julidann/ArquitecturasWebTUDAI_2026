@@ -1,2 +1,24 @@
+# Entrega 1: con Docker solo se levantan las bases de datos.
+# Los microservicios se ejecutan localmente (ver README).
+# En la entrega 2 se agregan los contenedores de cada servicio y del gateway.
 services:
-  
+  postgres:
+    image: postgres:16-alpine
+    container_name: ticketya-postgres
+    environment:
+      POSTGRES_USER: ticketya
+      POSTGRES_PASSWORD: ticketya
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ticketya-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketya"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  ticketya-pgdata:
