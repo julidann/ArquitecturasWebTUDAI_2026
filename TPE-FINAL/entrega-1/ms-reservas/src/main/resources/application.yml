@@ -1,0 +1,44 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: ms-reservas
+  datasource:
+    url: jdbc:postgresql://localhost:5432/reservas_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+
+servicios:
+  timeout-ms: 2000
+  eventos:
+    url: http://localhost:8081
+
+reservas:
+  # tiempo que se bloquean los lugares mientras el cliente paga
+  minutos-vigencia: 10
+  # cada cuanto corre el job que libera reservas vencidas
+  intervalo-vencimiento-ms: 30000
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.ticketya: INFO
