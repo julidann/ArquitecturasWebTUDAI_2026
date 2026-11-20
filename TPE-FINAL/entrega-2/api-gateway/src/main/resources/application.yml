@@ -1,0 +1,205 @@
+server:
+  port: 8080
+
+servicios:
+  eventos: http://localhost:8081
+  reservas: http://localhost:8082
+  compras: http://localhost:8083
+  pagos: http://localhost:8084
+  usuarios: http://localhost:8085
+  fila: http://localhost:8086
+  recomendaciones: http://localhost:8087
+  notificaciones: http://localhost:8088
+  bitacora: http://localhost:8089
+
+jwt:
+  # misma clave que ms-usuarios (en docker-compose viene de la variable JWT_SECRETO)
+  secreto: ${JWT_SECRETO:ticketya-clave-de-desarrollo-cambiar-en-produccion-2026}
+  emisor: ticketya
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # timeouts hacia los microservicios
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 15s
+        pool:
+          max-connections: 1000
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:5173"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders: "X-Correlation-Id"
+      # el gateway y el microservicio devuelven los dos el X-Correlation-Id: queda uno solo
+      default-filters:
+        - DedupeResponseHeader=X-Correlation-Id, RETAIN_FIRST
+      routes:
+        # Endpoints que solo usan otros microservicios: el gateway no los expone
+        # (confirmar/liberar reservas, liberar lugares vendidos, /internal/**).
+        - id: bloquear-internos
+          uri: no://op
+          predicates:
+            - Path=/api/reservas/*/confirmar,/api/reservas/*/liberar,/api/disponibilidad/eventos/*/liberaciones,/api/internal/**,/internal/**
+          filters:
+            - SetStatus=404
+
+        - id: usuarios
+          uri: ${servicios.usuarios}
+          predicates:
+            - Path=/api/auth/**,/api/usuarios/**,/api/usuarios
+          filters:
+            - StripPrefix=1
+
+        - id: eventos
+          uri: ${servicios.eventos}
+          predicates:
+            - Path=/api/eventos/**,/api/eventos,/api/lugares/**,/api/lugares
+          filters:
+            - StripPrefix=1
+
+        - id: reservas
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/api/reservas/**,/api/reservas
+          filters:
+            - StripPrefix=1
+
+        # de la disponibilidad solo se exponen las consultas (la inicializacion la hace ms-eventos)
+        - id: disponibilidad
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/api/disponibilidad/**
+            - Method=GET
+          filters:
+            - StripPrefix=1
+
+        - id: compras
+          uri: ${servicios.compras}
+          predicates:
+            - Path=/api/compras/**,/api/compras,/api/entradas/**,/api/entradas,/api/devoluciones/**,/api/devoluciones,/api/accesos/**,/api/reportes/**
+          filters:
+            - StripPrefix=1
+
+        - id: fila
+          uri: ${servicios.fila}
+          predicates:
+            - Path=/api/fila/**
+          filters:
+            - StripPrefix=1
+
+        - id: recomendaciones
+          uri: ${servicios.recomendaciones}
+          predicates:
+            - Path=/api/preferencias/**,/api/preferencias,/api/recomendaciones/**,/api/recomendaciones
+          filters:
+            - StripPrefix=1
+
+        - id: notificaciones
+          uri: ${servicios.notificaciones}
+          predicates:
+            - Path=/api/notificaciones/**,/api/notificaciones
+          filters:
+            - StripPrefix=1
+
+        - id: bitacora
+          uri: ${servicios.bitacora}
+          predicates:
+            - Path=/api/bitacora/**,/api/bitacora
+          filters:
+            - StripPrefix=1
+
+        # documentacion OpenAPI de cada servicio, para el Swagger UI unificado del gateway
+        - id: docs-eventos
+          uri: ${servicios.eventos}
+          predicates:
+            - Path=/docs/eventos/v3/api-docs
+          filters:
+            - RewritePath=/docs/eventos/(?<resto>.*), /$\{resto}
+        - id: docs-reservas
+          uri: ${servicios.reservas}
+          predicates:
+            - Path=/docs/reservas/v3/api-docs
+          filters:
+            - RewritePath=/docs/reservas/(?<resto>.*), /$\{resto}
+        - id: docs-compras
+          uri: ${servicios.compras}
+          predicates:
+            - Path=/docs/compras/v3/api-docs
+          filters:
+            - RewritePath=/docs/compras/(?<resto>.*), /$\{resto}
+        - id: docs-pagos
+          uri: ${servicios.pagos}
+          predicates:
+            - Path=/docs/pagos/v3/api-docs
+          filters:
+            - RewritePath=/docs/pagos/(?<resto>.*), /$\{resto}
+        - id: docs-usuarios
+          uri: ${servicios.usuarios}
+          predicates:
+            - Path=/docs/usuarios/v3/api-docs
+          filters:
+            - RewritePath=/docs/usuarios/(?<resto>.*), /$\{resto}
+        - id: docs-fila
+          uri: ${servicios.fila}
+          predicates:
+            - Path=/docs/fila/v3/api-docs
+          filters:
+            - RewritePath=/docs/fila/(?<resto>.*), /$\{resto}
+        - id: docs-recomendaciones
+          uri: ${servicios.recomendaciones}
+          predicates:
+            - Path=/docs/recomendaciones/v3/api-docs
+          filters:
+            - RewritePath=/docs/recomendaciones/(?<resto>.*), /$\{resto}
+        - id: docs-notificaciones
+          uri: ${servicios.notificaciones}
+          predicates:
+            - Path=/docs/notificaciones/v3/api-docs
+          filters:
+            - RewritePath=/docs/notificaciones/(?<resto>.*), /$\{resto}
+        - id: docs-bitacora
+          uri: ${servicios.bitacora}
+          predicates:
+            - Path=/docs/bitacora/v3/api-docs
+          filters:
+            - RewritePath=/docs/bitacora/(?<resto>.*), /$\{resto}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: ms-usuarios
+        url: /docs/usuarios/v3/api-docs
+      - name: ms-eventos
+        url: /docs/eventos/v3/api-docs
+      - name: ms-reservas
+        url: /docs/reservas/v3/api-docs
+      - name: ms-compras
+        url: /docs/compras/v3/api-docs
+      - name: ms-pagos
+        url: /docs/pagos/v3/api-docs
+      - name: ms-fila
+        url: /docs/fila/v3/api-docs
+      - name: ms-recomendaciones
+        url: /docs/recomendaciones/v3/api-docs
+      - name: ms-notificaciones
+        url: /docs/notificaciones/v3/api-docs
+      - name: ms-bitacora
+        url: /docs/bitacora/v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    com.ticketya: INFO

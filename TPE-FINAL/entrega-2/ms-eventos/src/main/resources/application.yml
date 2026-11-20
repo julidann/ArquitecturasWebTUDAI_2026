@@ -1,0 +1,62 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ms-eventos
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eventos_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+  cache:
+    type: redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      timeout: 500ms
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+
+servicios:
+  timeout-ms: 3000
+  reservas:
+    url: http://localhost:8082
+  compras:
+    url: http://localhost:8083
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    # si Redis o RabbitMQ se caen el servicio sigue atendiendo (cache y mensajes son best effort)
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false
+
+outbox:
+  intervalo-ms: 1000
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

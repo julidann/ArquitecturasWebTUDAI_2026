@@ -1,0 +1,118 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ms-compras
+  datasource:
+    url: jdbc:postgresql://localhost:5432/compras_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+
+servicios:
+  timeout-ms: 3000
+  reservas:
+    url: http://localhost:8082
+  pagos:
+    url: http://localhost:8084
+  eventos:
+    url: http://localhost:8081
+
+devoluciones:
+  # hasta cuantas horas antes del evento se puede pedir una devolucion
+  horas-minimas: 72
+
+compras:
+  recuperacion:
+    # cada cuanto se buscan compras en ERROR y cuanto se espera antes de retomarlas
+    intervalo-ms: 30000
+    segundos-de-gracia: 60
+
+outbox:
+  intervalo-ms: 1000
+
+# Resiliencia (Resilience4j) de las llamadas a otros servicios
+resilience4j:
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # solo se reintentan fallas de comunicacion / 5xx (las 4xx son respuestas de negocio)
+        retry-exceptions:
+          - com.ticketya.compras.exception.ServicioNoDisponibleException
+        ignore-exceptions:
+          - com.ticketya.compras.exception.RespuestaServicioException
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+          - com.ticketya.compras.exception.CircuitoAbiertoException
+    instances:
+      pagos:
+        base-config: default
+      reservas:
+        base-config: default
+      eventos:
+        base-config: default
+        max-attempts: 2
+  circuitbreaker:
+    configs:
+      default:
+        # se abre si fallan la mitad de las ultimas 50 llamadas (con ventanas chicas, en la prueba de
+        # carga con 20% de fallas aleatorias el circuito se abria por rachas de mala suerte)
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 50
+        minimum-number-of-calls: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 10
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - com.ticketya.compras.exception.ServicioNoDisponibleException
+        ignore-exceptions:
+          - com.ticketya.compras.exception.RespuestaServicioException
+    instances:
+      pagos:
+        base-config: default
+      eventos:
+        base-config: default
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,retries
+  health:
+    rabbit:
+      enabled: false
+    circuitbreakers:
+      enabled: true
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

@@ -1,0 +1,41 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: ms-usuarios
+  datasource:
+    url: jdbc:postgresql://localhost:5432/usuarios_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+jwt:
+  # clave HMAC compartida con el api-gateway (minimo 32 caracteres). En docker-compose se pisa con JWT_SECRETO.
+  secreto: ${JWT_SECRETO:ticketya-clave-de-desarrollo-cambiar-en-produccion-2026}
+  horas-vigencia: 8
+  emisor: ticketya
+
+usuarios:
+  # crea los usuarios de prueba (admin, organizadores, clientes, acceso) si la tabla esta vacia
+  cargar-iniciales: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

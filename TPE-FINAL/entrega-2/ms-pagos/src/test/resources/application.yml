@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ms-pagos
+  datasource:
+    url: jdbc:h2:mem:pagos_test;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+pasarela:
+  demora-ms: 0
+  tasa-fallos: 0
+
+bitacora:
+  enviar: false

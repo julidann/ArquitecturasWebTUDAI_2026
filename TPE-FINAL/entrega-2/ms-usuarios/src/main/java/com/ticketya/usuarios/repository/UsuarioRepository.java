@@ -1,0 +1,17 @@
+package com.ticketya.usuarios.repository;
+
+import com.ticketya.usuarios.model.Rol;
+import com.ticketya.usuarios.model.Usuario;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
+
+    Optional<Usuario> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
+    List<Usuario> findByRolOrderById(Rol rol);
+}

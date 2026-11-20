@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:usuarios_test;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+jwt:
+  secreto: clave-de-test-con-al-menos-32-caracteres!!
+  horas-vigencia: 1
+  emisor: ticketya
+usuarios:
+  cargar-iniciales: false

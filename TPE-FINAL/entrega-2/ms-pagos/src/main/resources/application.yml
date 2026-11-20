@@ -1,0 +1,51 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: ms-pagos
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pagos_db
+    username: ticketya
+    password: ticketya
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+
+pasarela:
+  # latencia simulada de la pasarela externa
+  demora-ms: 300
+  monto-maximo: 5000000
+  # porcentaje (0..1) de pedidos en los que la pasarela "se cae" y responde 503 sin cobrar.
+  # Sirve para probar los reintentos y el circuit breaker de ms-compras (en docker-compose se
+  # puede cambiar con PASARELA_TASA_FALLOS).
+  tasa-fallos: ${PASARELA_TASA_FALLOS:0}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    rabbit:
+      enabled: false
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

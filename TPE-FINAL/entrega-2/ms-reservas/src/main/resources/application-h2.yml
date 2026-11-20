@@ -1,0 +1,10 @@
+# Perfil para correr sin Docker: base en memoria H2.
+# mvn spring-boot:run -Dspring-boot.run.profiles=h2
+spring:
+  datasource:
+    url: jdbc:h2:mem:reservas_db;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
