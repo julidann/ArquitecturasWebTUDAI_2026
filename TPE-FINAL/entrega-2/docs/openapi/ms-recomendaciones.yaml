@@ -1,0 +1,216 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-recomendaciones
+  description: |
+    Preferencias de los clientes (tipos de evento, artistas favoritos, ciudad) y
+    recomendaciones de eventos (funcionalidad 10). Guarda los datos en **MongoDB**:
+    las preferencias son listas de largo variable y el historial de compras se
+    consulta con *aggregation pipelines* ("quienes compraron este evento también
+    compraron..."). Se alimenta de forma asincrónica con los mensajes
+    `evento.publicado`, `evento.cancelado`, `evento.reprogramado` y `compra.confirmada`.
+  version: 2.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8087
+  description: Directo al microservicio
+security:
+- bearerAuth: []
+tags:
+- name: Preferencias
+  description: Preferencias del cliente logueado (rol CLIENTE)
+paths:
+  /preferencias:
+    get:
+      tags:
+      - Preferencias
+      summary: Ver mis preferencias
+      description: Si nunca las cargó devuelve las listas vacías.
+      operationId: obtener
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenciasResponse'
+    put:
+      tags:
+      - Preferencias
+      summary: Guardar mis preferencias
+      description: 'Reemplaza las preferencias completas: tipos de evento, artistas favoritos y ciudad.'
+      operationId: guardar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferenciasRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenciasResponse'
+  /recomendaciones:
+    get:
+      tags:
+      - Recomendaciones
+      summary: Eventos sugeridos para mí (CLIENTE)
+      description: Combina artistas favoritos, tipos de evento y ciudad de las preferencias con el historial de compras (co-compra).
+        Cada sugerencia trae el puntaje y los motivos.
+      operationId: paraMi
+      parameters:
+      - name: limite
+        in: query
+        required: false
+        schema:
+          maximum: 50
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecomendacionResponse'
+  /recomendaciones/eventos/{eventoId}/tambien-compraron:
+    get:
+      tags:
+      - Recomendaciones
+      summary: Quienes compraron este evento también compraron... (público)
+      operationId: tambienCompraron
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: limite
+        in: query
+        required: false
+        schema:
+          maximum: 20
+          minimum: 1
+          type: integer
+          format: int32
+          default: 5
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TambienCompraronResponse'
+      security: []
+components:
+  schemas:
+    PreferenciasRequest:
+      type: object
+      properties:
+        tiposEvento:
+          maxItems: 10
+          minItems: 0
+          type: array
+          example:
+          - RECITAL
+          - TEATRO
+          items:
+            type: string
+            example: '["RECITAL","TEATRO"]'
+        artistasFavoritos:
+          maxItems: 30
+          minItems: 0
+          type: array
+          example:
+          - Los Piojos
+          - Fito Paez
+          items:
+            type: string
+            example: '["Los Piojos","Fito Paez"]'
+        ciudad:
+          maxLength: 80
+          minLength: 0
+          type: string
+          example: Tandil
+    PreferenciasResponse:
+      type: object
+      properties:
+        usuarioId:
+          type: integer
+          format: int64
+        tiposEvento:
+          type: array
+          items:
+            type: string
+        artistasFavoritos:
+          type: array
+          items:
+            type: string
+        ciudad:
+          type: string
+        actualizadas:
+          type: string
+          format: date-time
+    RecomendacionResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        tipo:
+          type: string
+        participantes:
+          type: array
+          items:
+            type: string
+        lugar:
+          type: string
+        ciudad:
+          type: string
+        fechaHora:
+          type: string
+          format: date-time
+        precioMinimo:
+          type: number
+        puntaje:
+          type: integer
+          format: int32
+        motivos:
+          type: array
+          items:
+            type: string
+    TambienCompraronResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        tipo:
+          type: string
+        ciudad:
+          type: string
+        fechaHora:
+          type: string
+          format: date-time
+        compradoresEnComun:
+          type: integer
+          format: int64
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

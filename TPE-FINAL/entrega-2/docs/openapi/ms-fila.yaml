@@ -1,0 +1,268 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-fila
+  description: |
+    Fila virtual para eventos de **alta demanda** (funcionalidad 6). Al abrirse la venta
+    el cliente ingresa a la fila y consulta su posición; cada N segundos se habilita una
+    tanda de clientes en orden de llegada. El cliente habilitado recibe un **turno**
+    firmado que tiene que mandar en el header `X-Turno-Fila` al reservar en ms-reservas.
+  version: 2.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8086
+  description: Directo al microservicio
+security:
+- bearerAuth: []
+paths:
+  /fila/eventos/{eventoId}/configuracion:
+    put:
+      tags:
+      - Fila virtual
+      summary: Configurar tandas (ORGANIZADOR dueño o ADMIN)
+      description: Tamaño de tanda, segundos entre tandas y minutos que tiene un habilitado para comprar. Un ADMIN puede abrir
+        a mano la fila de un evento que no la tenía.
+      operationId: configurar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfiguracionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoFilaResponse'
+  /fila/eventos/{eventoId}/ingresar:
+    post:
+      tags:
+      - Fila virtual
+      summary: Ingresar a la fila (CLIENTE)
+      description: 'Idempotente: si ya estaba en la fila conserva su lugar; si ya estaba habilitado devuelve su turno.'
+      operationId: ingresar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '404':
+          description: El evento no tiene fila virtual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Posición en la fila o turno habilitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnoResponse'
+        '409':
+          description: La fila está cerrada (evento cancelado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /fila/eventos/{eventoId}/mi-turno:
+    get:
+      tags:
+      - Fila virtual
+      summary: Consultar mi posición / turno (CLIENTE)
+      description: La app lo consulta cada algunos segundos. Cuando el estado pasa a HABILITADO trae el `turno`.
+      operationId: miTurno
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '404':
+          description: No está en la fila o su turno venció
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /fila/eventos/{eventoId}/estado:
+    get:
+      tags:
+      - Fila virtual
+      summary: Estado de la fila (ORGANIZADOR dueño o ADMIN)
+      operationId: estado
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoFilaResponse'
+  /fila/eventos/{eventoId}:
+    delete:
+      tags:
+      - Fila virtual
+      summary: Salir de la fila (CLIENTE)
+      operationId: abandonar
+      parameters:
+      - name: eventoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '204':
+          description: No Content
+components:
+  schemas:
+    ConfiguracionRequest:
+      required:
+      - intervaloSegundos
+      - minutosParaComprar
+      - tamanioTanda
+      type: object
+      properties:
+        tamanioTanda:
+          maximum: 10000
+          minimum: 1
+          type: integer
+          description: Clientes que se habilitan por tanda
+          format: int32
+          example: 200
+        intervaloSegundos:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          description: Segundos entre tandas
+          format: int32
+          example: 10
+        minutosParaComprar:
+          maximum: 60
+          minimum: 1
+          type: integer
+          description: Minutos que tiene un cliente habilitado para reservar
+          format: int32
+          example: 10
+        activa:
+          type: boolean
+          description: false cierra la fila (no entra nadie más)
+          example: true
+    EstadoFilaResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+          example: 7
+        activa:
+          type: boolean
+          example: true
+        enEspera:
+          type: integer
+          format: int64
+          example: 12000
+        habilitadosTotal:
+          type: integer
+          description: Clientes habilitados desde que se abrió la fila
+          format: int64
+          example: 3000
+        tamanioTanda:
+          type: integer
+          format: int32
+          example: 200
+        intervaloSegundos:
+          type: integer
+          format: int32
+          example: 10
+        minutosParaComprar:
+          type: integer
+          format: int32
+          example: 10
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: El evento no tiene precio definido para todos los sectores
+        path:
+          type: string
+          example: /eventos/1/publicar
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    TurnoResponse:
+      type: object
+      properties:
+        eventoId:
+          type: integer
+          format: int64
+          example: 7
+        usuarioId:
+          type: integer
+          format: int64
+          example: 4
+        estado:
+          type: string
+          example: EN_ESPERA
+          enum:
+          - EN_ESPERA
+          - HABILITADO
+        posicion:
+          type: integer
+          description: Posición en la fila (1 = el próximo). Null si ya está habilitado.
+          format: int64
+          example: 350
+        enEspera:
+          type: integer
+          description: Clientes esperando en total
+          format: int64
+          example: 12000
+        esperaEstimadaSegundos:
+          type: integer
+          description: Estimación en segundos hasta que lo habiliten
+          format: int64
+          example: 40
+        turno:
+          type: string
+          description: 'Token de turno: se envía en el header X-Turno-Fila al reservar. Solo si está HABILITADO.'
+        habilitadoHasta:
+          type: string
+          description: Hasta cuándo puede empezar su compra. Solo si está HABILITADO.
+          format: date-time
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

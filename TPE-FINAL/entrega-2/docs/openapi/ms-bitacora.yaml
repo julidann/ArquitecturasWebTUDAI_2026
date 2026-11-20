@@ -1,0 +1,133 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-bitacora
+  description: |
+    Log centralizado (consigna de trazabilidad). Cada microservicio publica sus
+    operaciones críticas (compra, devolución, cancelación, ingreso al evento, cobros...)
+    en RabbitMQ y este servicio las guarda en **MongoDB**. Con el `X-Correlation-Id` que
+    genera el gateway se puede seguir una misma operación a través de todos los servicios.
+  version: 2.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8089
+  description: Directo al microservicio
+security:
+- bearerAuth: []
+tags:
+- name: Bitácora
+  description: Log centralizado de operaciones críticas (solo ADMIN)
+paths:
+  /bitacora:
+    get:
+      tags:
+      - Bitácora
+      summary: Buscar en la bitácora
+      description: Todos los filtros son opcionales. `operacion` acepta el nombre completo (compra.aprobada) o el prefijo
+        (compra).
+      operationId: buscar
+      parameters:
+      - name: correlationId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: operacion
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: servicio
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: usuarioId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: desde
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limite
+        in: query
+        required: false
+        schema:
+          maximum: 500
+          minimum: 1
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegistroResponse'
+  /bitacora/trazas/{correlationId}:
+    get:
+      tags:
+      - Bitácora
+      summary: Seguir una operación entre servicios
+      description: 'Devuelve, en orden, todo lo que registraron los distintos microservicios con ese X-Correlation-Id (ej.
+        la compra: reserva confirmada, cobro, compra aprobada).'
+      operationId: traza
+      parameters:
+      - name: correlationId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegistroResponse'
+components:
+  schemas:
+    RegistroResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        correlationId:
+          type: string
+        servicio:
+          type: string
+        operacion:
+          type: string
+        resultado:
+          type: string
+        usuarioId:
+          type: integer
+          format: int64
+        detalle:
+          type: object
+          additionalProperties:
+            type: object
+        fecha:
+          type: string
+          format: date-time
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

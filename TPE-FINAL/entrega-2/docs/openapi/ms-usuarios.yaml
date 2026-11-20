@@ -1,0 +1,341 @@
+openapi: 3.0.1
+info:
+  title: TicketYa - ms-usuarios
+  description: |
+    Registro e inicio de sesión. `POST /auth/login` devuelve un **JWT** (HS256) con el id
+    de usuario (`sub`) y el rol (`rol`: CLIENTE, ORGANIZADOR, ADMIN o ACCESO).
+    Ese token se envía en `Authorization: Bearer <token>` en todos los requests al gateway.
+  version: 2.0.0
+servers:
+- url: http://localhost:8080/api
+  description: A través del API Gateway
+- url: http://localhost:8085
+  description: Directo al microservicio
+tags:
+- name: Autenticación
+  description: Registro de clientes e inicio de sesión (públicos)
+paths:
+  /usuarios:
+    get:
+      tags:
+      - Usuarios
+      summary: Listar usuarios (ADMIN)
+      operationId: listar
+      parameters:
+      - name: rol
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - CLIENTE
+          - ORGANIZADOR
+          - ADMIN
+          - ACCESO
+      responses:
+        '403':
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Usuarios
+      summary: Alta de usuario con rol (ADMIN)
+      description: Para crear organizadores, personal de acceso u otros administradores.
+      operationId: alta
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AltaUsuarioRequest'
+        required: true
+      responses:
+        '409':
+          description: El email ya está registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: No es administrador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+      security:
+      - bearerAuth: []
+  /usuarios/{id}/deshabilitar:
+    post:
+      tags:
+      - Usuarios
+      summary: Deshabilitar un usuario (ADMIN)
+      description: No puede volver a iniciar sesión.
+      operationId: deshabilitar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+      security:
+      - bearerAuth: []
+  /auth/registro:
+    post:
+      tags:
+      - Autenticación
+      summary: Registrarse como cliente
+      description: Público. El usuario queda con rol CLIENTE.
+      operationId: registrar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+        required: true
+      responses:
+        '409':
+          description: El email ya está registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/login:
+    post:
+      tags:
+      - Autenticación
+      summary: Iniciar sesión
+      description: 'Público. Devuelve el JWT a usar en `Authorization: Bearer`.'
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '401':
+          description: Email o contraseña incorrectos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Token emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+  /usuarios/me:
+    get:
+      tags:
+      - Usuarios
+      summary: Mis datos
+      description: Cualquier usuario autenticado.
+      operationId: yo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+      security:
+      - bearerAuth: []
+  /internal/usuarios/{id}:
+    get:
+      tags:
+      - Usuarios
+      summary: '[Interno] Datos de contacto'
+      description: Lo usa ms-notificaciones para obtener el email.
+      operationId: contacto
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactoResponse'
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    AltaUsuarioRequest:
+      required:
+      - email
+      - nombre
+      - password
+      - rol
+      type: object
+      properties:
+        email:
+          type: string
+          example: puerta3@ticketya.com
+        nombre:
+          maxLength: 120
+          minLength: 0
+          type: string
+          example: Puerta 3 - Estadio Único
+        password:
+          maxLength: 72
+          minLength: 6
+          type: string
+          example: acceso123
+        rol:
+          type: string
+          example: ACCESO
+          enum:
+          - CLIENTE
+          - ORGANIZADOR
+          - ADMIN
+          - ACCESO
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          format: int32
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        mensaje:
+          type: string
+          example: El evento no tiene precio definido para todos los sectores
+        path:
+          type: string
+          example: /eventos/1/publicar
+        detalles:
+          type: array
+          items:
+            type: string
+      description: Formato comun de error de todos los microservicios
+    UsuarioResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 3
+        email:
+          type: string
+          example: cliente@ticketya.com
+        nombre:
+          type: string
+          example: Carla Cliente
+        rol:
+          type: string
+          example: CLIENTE
+          enum:
+          - CLIENTE
+          - ORGANIZADOR
+          - ADMIN
+          - ACCESO
+        activo:
+          type: boolean
+        creadoEn:
+          type: string
+          format: date-time
+    RegistroRequest:
+      required:
+      - email
+      - nombre
+      - password
+      type: object
+      properties:
+        email:
+          type: string
+          example: juana@mail.com
+        nombre:
+          maxLength: 120
+          minLength: 0
+          type: string
+          example: Juana Pérez
+        password:
+          maxLength: 72
+          minLength: 6
+          type: string
+          example: secreta123
+    LoginRequest:
+      required:
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          type: string
+          example: cliente@ticketya.com
+        password:
+          type: string
+          example: cliente123
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiJ9...
+        tipo:
+          type: string
+          example: Bearer
+        expiraEn:
+          type: string
+          format: date-time
+          example: '2026-11-20T03:00:00Z'
+        usuario:
+          $ref: '#/components/schemas/UsuarioResponse'
+    ContactoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+        nombre:
+          type: string
+        activo:
+          type: boolean
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
