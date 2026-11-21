@@ -1,0 +1,94 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: ms-notificaciones
+  data:
+    mongodb:
+      uri: ${MONGO_URI:mongodb://localhost:27017/notificaciones_db}
+      auto-index-creation: true
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2s
+          multiplier: 2
+
+servicios:
+  timeout-ms: 2000
+  usuarios:
+    url: http://localhost:8085
+  compras:
+    url: http://localhost:8083
+  recomendaciones:
+    url: http://localhost:8087
+
+notificaciones:
+  max-intentos: 5
+  intervalo-reenvio-ms: 15000
+
+proveedor:
+  # porcentaje (0..1) de envios en los que el proveedor de email "se cae" (PROVEEDOR_TASA_FALLOS)
+  tasa-fallos: ${PROVEEDOR_TASA_FALLOS:0}
+
+resilience4j:
+  retry:
+    instances:
+      proveedor:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - com.ticketya.notificaciones.exception.ServicioNoDisponibleException
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+      servicios:
+        max-attempts: 3
+        wait-duration: 300ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.ticketya.notificaciones.exception.ServicioNoDisponibleException
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        record-exceptions:
+          - com.ticketya.notificaciones.exception.ServicioNoDisponibleException
+    instances:
+      proveedor:
+        base-config: default
+      recomendaciones:
+        base-config: default
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    rabbit:
+      enabled: false
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO
