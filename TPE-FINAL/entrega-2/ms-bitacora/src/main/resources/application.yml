@@ -1,0 +1,40 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: ms-bitacora
+  data:
+    mongodb:
+      uri: ${MONGO_URI:mongodb://localhost:27017/bitacora_db}
+      auto-index-creation: true
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    rabbit:
+      enabled: false
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

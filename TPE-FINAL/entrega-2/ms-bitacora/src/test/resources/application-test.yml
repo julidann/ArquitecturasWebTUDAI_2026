@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: ms-bitacora
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
