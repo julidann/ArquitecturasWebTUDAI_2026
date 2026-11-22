@@ -1,0 +1,47 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: ms-fila
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: ticketya
+    password: ticketya
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+
+fila:
+  # clave HMAC compartida con ms-reservas para firmar los turnos (minimo 32 caracteres)
+  secreto: ${FILA_SECRETO:ticketya-fila-virtual-clave-de-desarrollo-2026}
+  # valores por defecto cuando se publica un evento de alta demanda
+  tamanio-tanda: 100
+  intervalo-segundos: 10
+  minutos-para-comprar: 10
+  # cada cuanto se revisa si toca habilitar una nueva tanda
+  intervalo-job-ms: 1000
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.ticketya: INFO

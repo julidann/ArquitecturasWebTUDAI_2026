@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: ms-fila
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+fila:
+  secreto: clave-de-test-de-la-fila-con-mas-de-32-bytes
+  tamanio-tanda: 2
+  intervalo-segundos: 1
+  minutos-para-comprar: 10
+  # en los tests las tandas se disparan a mano
+  intervalo-job-ms: 3600000
