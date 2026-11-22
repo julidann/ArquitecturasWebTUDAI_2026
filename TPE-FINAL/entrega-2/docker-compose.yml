@@ -1,2 +1,245 @@
+# TicketYa - entrega 2: todo el sistema con un solo comando
+#
+#   docker compose up -d --build
+#
+# Cada microservicio, cada base y el gateway corren en su propio contenedor. Desde afuera solo se
+# accede por el API Gateway (http://localhost:8080). Los puertos de las bases / Redis / RabbitMQ se
+# publican solo para poder correr los servicios desde el IDE en desarrollo (ver README).
+
+x-servicio: &servicio
+  restart: unless-stopped
+  environment: &entorno
+    TZ: America/Argentina/Buenos_Aires
+    JAVA_OPTS: "-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Duser.timezone=America/Argentina/Buenos_Aires -Dsun.net.inetaddr.ttl=5"
+    RABBIT_HOST: rabbitmq
+    REDIS_HOST: redis
+    JWT_SECRETO: ${JWT_SECRETO:-ticketya-clave-de-desarrollo-cambiar-en-produccion-2026}
+    FILA_SECRETO: ${FILA_SECRETO:-ticketya-fila-virtual-clave-de-desarrollo-2026}
+    SPRING_DATASOURCE_USERNAME: ticketya
+    SPRING_DATASOURCE_PASSWORD: ticketya
+  mem_limit: 512m
+
+x-depende-infra: &depende-infra
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+
 services:
-  
+  # ---------------------------------------------------------------- infraestructura
+  postgres:
+    image: postgres:16-alpine
+    container_name: ticketya-postgres
+    environment:
+      POSTGRES_USER: ticketya
+      POSTGRES_PASSWORD: ticketya
+      POSTGRES_DB: postgres
+      TZ: America/Argentina/Buenos_Aires
+    command: ["postgres", "-c", "max_connections=300"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ticketya-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketya"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:7.0
+    container_name: ticketya-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ticketya-mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ticketya-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ticketya-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ticketya
+      RABBITMQ_DEFAULT_PASS: ticketya
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # consola de administracion
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------- microservicios
+  ms-usuarios:
+    <<: *servicio
+    build: ./ms-usuarios
+    image: ticketya/ms-usuarios
+    environment:
+      <<: *entorno
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/usuarios_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ms-eventos:
+    <<: *servicio
+    build: ./ms-eventos
+    image: ticketya/ms-eventos
+    environment:
+      <<: *entorno
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/eventos_db
+      SERVICIOS_RESERVAS_URL: http://ms-reservas:8082
+      SERVICIOS_COMPRAS_URL: http://ms-compras:8083
+    depends_on:
+      <<: *depende-infra
+      redis:
+        condition: service_healthy
+
+  # dos instancias: el mecanismo contra la doble venta tiene que funcionar con varias a la vez
+  ms-reservas:
+    <<: *servicio
+    build: ./ms-reservas
+    image: ticketya/ms-reservas
+    deploy:
+      replicas: ${RESERVAS_INSTANCIAS:-2}
+    environment:
+      <<: *entorno
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/reservas_db
+      SERVICIOS_EVENTOS_URL: http://ms-eventos:8081
+    depends_on: *depende-infra
+
+  ms-compras:
+    <<: *servicio
+    build: ./ms-compras
+    image: ticketya/ms-compras
+    environment:
+      <<: *entorno
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/compras_db
+      SERVICIOS_RESERVAS_URL: http://ms-reservas:8082
+      SERVICIOS_PAGOS_URL: http://ms-pagos:8084
+      SERVICIOS_EVENTOS_URL: http://ms-eventos:8081
+    depends_on: *depende-infra
+
+  ms-pagos:
+    <<: *servicio
+    build: ./ms-pagos
+    image: ticketya/ms-pagos
+    environment:
+      <<: *entorno
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pagos_db
+      # 0.2 = la pasarela "se cae" en el 20% de los cobros (para probar reintentos y circuit breaker)
+      PASARELA_TASA_FALLOS: ${PASARELA_TASA_FALLOS:-0}
+    depends_on: *depende-infra
+
+  ms-fila:
+    <<: *servicio
+    build: ./ms-fila
+    image: ticketya/ms-fila
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ms-recomendaciones:
+    <<: *servicio
+    build: ./ms-recomendaciones
+    image: ticketya/ms-recomendaciones
+    environment:
+      <<: *entorno
+      MONGO_URI: mongodb://mongo:27017/recomendaciones_db
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ms-notificaciones:
+    <<: *servicio
+    build: ./ms-notificaciones
+    image: ticketya/ms-notificaciones
+    environment:
+      <<: *entorno
+      MONGO_URI: mongodb://mongo:27017/notificaciones_db
+      SERVICIOS_USUARIOS_URL: http://ms-usuarios:8085
+      SERVICIOS_COMPRAS_URL: http://ms-compras:8083
+      SERVICIOS_RECOMENDACIONES_URL: http://ms-recomendaciones:8087
+      PROVEEDOR_TASA_FALLOS: ${PROVEEDOR_TASA_FALLOS:-0}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ms-bitacora:
+    <<: *servicio
+    build: ./ms-bitacora
+    image: ticketya/ms-bitacora
+    environment:
+      <<: *entorno
+      MONGO_URI: mongodb://mongo:27017/bitacora_db
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------- punto de entrada unico
+  api-gateway:
+    <<: *servicio
+    build: ./api-gateway
+    image: ticketya/api-gateway
+    container_name: ticketya-gateway
+    environment:
+      <<: *entorno
+      SERVICIOS_EVENTOS: http://ms-eventos:8081
+      SERVICIOS_RESERVAS: http://ms-reservas:8082
+      SERVICIOS_COMPRAS: http://ms-compras:8083
+      SERVICIOS_PAGOS: http://ms-pagos:8084
+      SERVICIOS_USUARIOS: http://ms-usuarios:8085
+      SERVICIOS_FILA: http://ms-fila:8086
+      SERVICIOS_RECOMENDACIONES: http://ms-recomendaciones:8087
+      SERVICIOS_NOTIFICACIONES: http://ms-notificaciones:8088
+      SERVICIOS_BITACORA: http://ms-bitacora:8089
+    ports:
+      - "8080:8080"
+    depends_on:
+      ms-usuarios:
+        condition: service_healthy
+      ms-eventos:
+        condition: service_healthy
+      ms-reservas:
+        condition: service_healthy
+      ms-compras:
+        condition: service_healthy
+      ms-pagos:
+        condition: service_healthy
+      ms-fila:
+        condition: service_healthy
+      ms-recomendaciones:
+        condition: service_healthy
+      ms-notificaciones:
+        condition: service_healthy
+      ms-bitacora:
+        condition: service_healthy
+
+volumes:
+  ticketya-pgdata:
+  ticketya-mongodata:
