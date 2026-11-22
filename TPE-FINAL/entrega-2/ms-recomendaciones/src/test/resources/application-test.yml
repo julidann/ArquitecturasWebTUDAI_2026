@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: ms-recomendaciones
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
