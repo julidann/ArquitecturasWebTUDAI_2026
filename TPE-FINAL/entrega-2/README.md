@@ -12,7 +12,11 @@ implementado con **microservicios Spring Boot** y un **API Gateway**.
 > (Redis), bitácora y log centralizado con correlation id, un contenedor por servicio con un único
 > `docker-compose.yml`, tests de integración y prueba de carga.
 
-**Integrantes:** _completar_
+**Integrantes:** 
+* D'Annunzio Julieta
+* Mensa Matias
+* Parasuco Forturella Santiago
+* Sánchez Tomé Luciano
 
 ## Contenido del repositorio
 
